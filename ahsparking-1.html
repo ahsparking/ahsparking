@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>AHS Parking Manager</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f0f4f8;
+    --surface: #ffffff;
+    --card: #ffffff;
+    --border: #e2e8f0;
+    --accent: #1a56db;
+    --accent-light: #ebf2ff;
+    --green: #0e9f6e;
+    --green-light: #e8f8f2;
+    --red: #e02424;
+    --red-light: #fdf2f2;
+    --yellow: #d97706;
+    --yellow-light: #fffbeb;
+    --text: #1e293b;
+    --muted: #64748b;
+    --font: 'Outfit', sans-serif;
+    --mono: 'JetBrains Mono', monospace;
+    --shadow: 0 1px 3px rgba(0,0,0,.08), 0 4px 16px rgba(0,0,0,.06);
+    --shadow-lg: 0 8px 32px rgba(0,0,0,.12);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font-family:var(--font); min-height:100vh; }
+
+  /* HEADER */
+  header {
+    background: linear-gradient(135deg, #1a56db 0%, #1e40af 100%);
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 64px;
+    position: sticky; top:0; z-index:100;
+    box-shadow: 0 2px 16px rgba(26,86,219,.3);
+  }
+  .logo { font-size:20px; font-weight:800; color:#fff; letter-spacing:-0.5px; display:flex; align-items:center; gap:10px; }
+  .logo-icon { width:36px; height:36px; background:rgba(255,255,255,.2); border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:18px; }
+  .hdr-stats { display:flex; gap:24px; }
+  .hdr-stat { text-align:center; }
+  .hdr-val { font-size:17px; font-weight:700; color:#fff; font-family:var(--mono); }
+  .hdr-lbl { font-size:9px; color:rgba(255,255,255,.7); text-transform:uppercase; letter-spacing:1px; }
+
+  /* NAV */
+  nav {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+    box-shadow: var(--shadow);
+  }
+  .nav-tab {
+    padding: 14px 18px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+    transition: all .2s;
+  }
+  .nav-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .nav-tab:hover:not(.active) { color: var(--text); }
+
+  /* MAIN */
+  main { padding: 24px; max-width: 1100px; margin: 0 auto; }
+  .page { display:none; }
+  .page.active { display:block; }
+
+  /* LOADING */
+  .loading { display:flex; align-items:center; justify-content:center; padding:60px; gap:12px; color:var(--muted); font-size:14px; }
+  .spinner { width:24px; height:24px; border:3px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  /* CARDS */
+  .card { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:20px; box-shadow:var(--shadow); }
+  .card + .card { margin-top:16px; }
+  .card-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; flex-wrap:wrap; gap:10px; }
+  .card-title { font-size:15px; font-weight:700; color:var(--text); }
+
+  /* SUMMARY */
+  .summary-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:14px; margin-bottom:20px; }
+  .s-card { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:18px; box-shadow:var(--shadow); }
+  .s-label { font-size:11px; text-transform:uppercase; letter-spacing:1px; color:var(--muted); font-weight:600; margin-bottom:8px; }
+  .s-value { font-size:26px; font-weight:800; font-family:var(--mono); }
+  .s-card.blue .s-value { color:var(--accent); }
+  .s-card.green .s-value { color:var(--green); }
+  .s-card.red .s-value { color:var(--red); }
+  .s-card.yellow .s-value { color:var(--yellow); }
+
+  /* BUTTONS */
+  .btn { padding:10px 18px; border-radius:8px; border:none; cursor:pointer; font-family:var(--font); font-weight:600; font-size:13px; transition:all .2s; display:inline-flex; align-items:center; gap:6px; }
+  .btn:active { transform:scale(.97); }
+  .btn-primary { background:var(--accent); color:#fff; box-shadow:0 2px 8px rgba(26,86,219,.3); }
+  .btn-primary:hover { background:#1648c7; }
+  .btn-success { background:var(--green); color:#fff; box-shadow:0 2px 8px rgba(14,159,110,.3); }
+  .btn-success:hover { background:#0a8f62; }
+  .btn-danger { background:var(--red); color:#fff; }
+  .btn-outline { background:transparent; border:1px solid var(--border); color:var(--text); }
+  .btn-outline:hover { border-color:var(--accent); color:var(--accent); background:var(--accent-light); }
+  .btn-wa { background:#25D366; color:#fff; box-shadow:0 2px 8px rgba(37,211,102,.3); }
+  .btn-wa:hover { background:#1db954; }
+  .btn-sm { padding:7px 12px; font-size:12px; }
+  .btn-xs { padding:4px 10px; font-size:11px; }
+
+  /* FORM */
+  .form-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(190px, 1fr)); gap:14px; }
+  .form-group { display:flex; flex-direction:column; gap:6px; }
+  label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.8px; color:var(--muted); }
+  input, select, textarea {
+    background:var(--bg); border:1.5px solid var(--border); border-radius:8px;
+    padding:10px 12px; color:var(--text); font-family:var(--font); font-size:14px;
+    outline:none; transition:border-color .2s, box-shadow .2s;
+  }
+  input:focus, select:focus, textarea:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(26,86,219,.1); background:#fff; }
+
+  /* TABLE */
+  .table-wrap { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th { text-align:left; padding:10px 14px; font-size:10px; text-transform:uppercase; letter-spacing:1px; color:var(--muted); font-weight:700; border-bottom:2px solid var(--border); background:var(--bg); }
+  td { padding:13px 14px; border-bottom:1px solid var(--border); vertical-align:middle; }
+  tr:last-child td { border-bottom:none; }
+  tr:hover td { background:#f8fafc; }
+
+  /* BADGES */
+  .badge { display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:700; font-family:var(--mono); }
+  .badge-paid { background:var(--green-light); color:var(--green); }
+  .badge-unpaid { background:var(--red-light); color:var(--red); }
+  .badge-bike { background:#eff6ff; color:#2563eb; }
+  .badge-car { background:#f5f3ff; color:#7c3aed; }
+  .badge-daily { background:#fff7ed; color:#c2410c; }
+  .badge-house { background:#f0fdf4; color:#15803d; }
+
+  /* PAYMENT CARDS */
+  .pay-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:14px; }
+  .pay-card { background:var(--surface); border:1.5px solid var(--border); border-radius:14px; padding:16px; box-shadow:var(--shadow); transition:box-shadow .2s; }
+  .pay-card:hover { box-shadow:var(--shadow-lg); }
+  .pay-card.unpaid { border-color:#fca5a5; background:#fff8f8; }
+  .pay-card.paid { border-color:#6ee7b7; background:#f0fdf8; }
+  .pc-top { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; }
+  .pc-name { font-size:15px; font-weight:700; }
+  .pc-meta { font-size:12px; color:var(--muted); margin-top:2px; font-family:var(--mono); }
+  .pc-amount { font-size:20px; font-weight:800; font-family:var(--mono); }
+  .pc-amount.red { color:var(--red); }
+  .pc-amount.green { color:var(--green); }
+  .pc-actions { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+
+  /* MODAL */
+  .overlay { display:none; position:fixed; inset:0; background:rgba(15,23,42,.6); z-index:200; align-items:center; justify-content:center; backdrop-filter:blur(4px); }
+  .overlay.open { display:flex; }
+  .modal { background:var(--surface); border-radius:16px; padding:28px; width:460px; max-width:95vw; box-shadow:var(--shadow-lg); animation:slideUp .25s ease; }
+  @keyframes slideUp { from { transform:translateY(20px); opacity:0; } to { transform:translateY(0); opacity:1; } }
+  .modal h3 { font-size:18px; font-weight:800; margin-bottom:6px; }
+  .modal-sub { font-size:13px; color:var(--muted); margin-bottom:16px; }
+  .modal-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:20px; }
+
+  /* WHATSAPP PREVIEW */
+  .wa-preview { background:#0b1e16; border-radius:12px; padding:16px; margin-top:14px; }
+  .wa-header { display:flex; align-items:center; gap:8px; margin-bottom:12px; }
+  .wa-avatar { width:32px; height:32px; background:#25D366; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:14px; }
+  .wa-name { font-size:12px; font-weight:600; color:#25D366; }
+  .wa-bubble { background:#dcf8c6; border-radius:4px 14px 14px 14px; padding:12px 14px; font-family:'Courier New',monospace; font-size:12px; color:#111; white-space:pre-wrap; line-height:1.6; }
+  .wa-time { text-align:right; font-size:10px; color:#555; margin-top:4px; }
+
+  /* TOAST */
+  .toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(100px); background:#1e293b; color:#fff; padding:12px 24px; border-radius:10px; font-size:13px; font-weight:600; z-index:999; transition:transform .3s; box-shadow:var(--shadow-lg); }
+  .toast.show { transform:translateX(-50%) translateY(0); }
+  .toast.success { background:var(--green); }
+  .toast.error { background:var(--red); }
+
+  /* ALERT */
+  .alert { padding:12px 16px; border-radius:10px; font-size:13px; margin-bottom:16px; display:flex; align-items:flex-start; gap:10px; }
+  .alert-info { background:var(--accent-light); border:1px solid #bfdbfe; color:#1e40af; }
+  .alert-warn { background:var(--yellow-light); border:1px solid #fcd34d; color:#92400e; }
+
+  .empty { text-align:center; padding:48px 24px; color:var(--muted); }
+  .empty-icon { font-size:48px; margin-bottom:12px; }
+  .empty-text { font-size:14px; }
+  .flex { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .mono { font-family:var(--mono); }
+  .search-row { display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
+  .search-row input { flex:1; min-width:200px; }
+
+  /* STATUS DOT */
+  .dot { width:8px; height:8px; border-radius:50%; display:inline-block; }
+  .dot-green { background:var(--green); }
+  .dot-red { background:var(--red); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">🅿️</div>
+    AHS Parking
+  </div>
+  <div class="hdr-stats">
+    <div class="hdr-stat"><div class="hdr-val" id="h-customers">-</div><div class="hdr-lbl">Customers</div></div>
+    <div class="hdr-stat"><div class="hdr-val" id="h-collected">-</div><div class="hdr-lbl">Collected</div></div>
+    <div class="hdr-stat"><div class="hdr-val" id="h-pending" style="color:#fca5a5">-</div><div class="hdr-lbl">Pending</div></div>
+  </div>
+</header>
+
+<nav>
+  <div class="nav-tab active" onclick="switchTab('dashboard',this)">📊 Dashboard</div>
+  <div class="nav-tab" onclick="switchTab('customers',this)">👤 Customers</div>
+  <div class="nav-tab" onclick="switchTab('payments',this)">💳 Payments</div>
+  <div class="nav-tab" onclick="switchTab('whatsapp',this)">📲 WhatsApp</div>
+</nav>
+
+<main>
+
+<!-- DASHBOARD -->
+<div id="page-dashboard" class="page active">
+  <div class="summary-grid" id="summary-grid">
+    <div class="s-card blue"><div class="s-label">Total Customers</div><div class="s-value">-</div></div>
+    <div class="s-card green"><div class="s-label">Paid This Month</div><div class="s-value">-</div></div>
+    <div class="s-card red"><div class="s-label">Unpaid</div><div class="s-value">-</div></div>
+    <div class="s-card green"><div class="s-label">Collected</div><div class="s-value">-</div></div>
+    <div class="s-card red"><div class="s-label">Outstanding</div><div class="s-value">-</div></div>
+    <div class="s-card blue"><div class="s-label">Total Revenue</div><div class="s-value">-</div></div>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">⚠️ Unpaid This Month</span>
+      <button class="btn btn-wa btn-sm" onclick="bulkRemind()">📲 Remind All</button>
+    </div>
+    <div id="dash-unpaid"><div class="loading"><div class="spinner"></div> Loading...</div></div>
+  </div>
+</div>
+
+<!-- CUSTOMERS -->
+<div id="page-customers" class="page">
+  <div class="card">
+    <div class="card-header"><span class="card-title">➕ Add New Customer</span></div>
+    <div class="form-grid">
+      <div class="form-group"><label>Full Name *</label><input id="c-name" placeholder="e.g. Ravi Kumar" /></div>
+      <div class="form-group"><label>WhatsApp Number *</label><input id="c-phone" placeholder="919876543210" /></div>
+      <div class="form-group"><label>Type *</label>
+        <select id="c-type">
+          <option value="bike">🏍️ Bike</option>
+          <option value="car">🚗 Car</option>
+          <option value="daily">📅 Daily</option>
+          <option value="house">🏠 House/Land</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Vehicle No</label><input id="c-vehicle" placeholder="e.g. TN01AB1234" style="text-transform:uppercase" /></div>
+      <div class="form-group"><label>Slot / Door No *</label><input id="c-slot" placeholder="e.g. B-12 or Door 4A" /></div>
+      <div class="form-group"><label>Monthly Rent (₹) *</label><input id="c-rent" type="number" placeholder="500" /></div>
+      <div class="form-group"><label>Advance Paid (₹)</label><input id="c-advance" type="number" placeholder="0" /></div>
+      <div class="form-group"><label>Customer Since</label><input id="c-since" placeholder="e.g. Jan 2023 or 2 years" /></div>
+      <div class="form-group"><label>Start Date</label><input id="c-start" type="date" /></div>
+      <div class="form-group"><label>Address / Notes</label><input id="c-address" placeholder="Optional address or note" /></div>
+    </div>
+    <div style="margin-top:16px">
+      <button class="btn btn-primary" onclick="addCustomer()">➕ Add Customer</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><span class="card-title">All Customers</span></div>
+    <div class="search-row">
+      <input id="search-c" placeholder="🔍 Search name, phone, slot..." oninput="renderCustomers()" />
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Name</th><th>Phone</th><th>Type</th><th>Vehicle No</th><th>Slot</th><th>Rent</th><th>Advance</th><th>Since</th><th>This Month</th><th>Actions</th></tr></thead>
+        <tbody id="cust-tbody"><tr><td colspan="8"><div class="loading"><div class="spinner"></div> Loading...</div></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- PAYMENTS -->
+<div id="page-payments" class="page">
+  <div class="card">
+    <div class="card-header"><span class="card-title">💳 Record Payment</span></div>
+    <div class="form-grid">
+      <div class="form-group"><label>Customer *</label><select id="p-cust" onchange="showPaymentStatus()"></select></div>
+      <div class="form-group"><label>Month *</label><input id="p-month" type="month" onchange="showPaymentStatus()" /></div>
+      <div class="form-group"><label>Amount Paid (₹) *</label><input id="p-amount" type="number" placeholder="500" /></div>
+      <div class="form-group"><label>Payment Mode</label>
+        <select id="p-mode"><option>UPI</option><option>Cash</option><option>Bank Transfer</option><option>Other</option></select>
+      </div>
+      <div class="form-group"><label>Notes</label><input id="p-notes" placeholder="Optional" /></div>
+    </div>
+
+    <!-- PAYMENT STATUS BOX -->
+    <div id="payment-status-box" style="display:none;margin-top:16px"></div>
+
+    <div class="flex" style="margin-top:16px">
+      <button class="btn btn-success" onclick="recordPayment(true)">✅ Record & Send WhatsApp</button>
+      <button class="btn btn-outline" onclick="recordPayment(false)">💾 Record Only</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Payment History</span>
+      <div class="flex">
+        <input id="filter-month" type="month" onchange="renderPayments()" style="padding:6px 10px;font-size:12px;" />
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Customer</th><th>Slot</th><th>Month</th><th>Amount</th><th>Mode</th><th>Date</th><th>Action</th></tr></thead>
+        <tbody id="pay-tbody"><tr><td colspan="7"><div class="loading"><div class="spinner"></div> Loading...</div></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- WHATSAPP -->
+<div id="page-whatsapp" class="page">
+  <div class="alert alert-info">💡 Clicking "Send" opens WhatsApp with the message pre-filled. On mobile it opens the app directly.</div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">📝 Message Templates</span>
+      <button class="btn btn-primary btn-sm" onclick="saveTemplates()">💾 Save Templates</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div class="form-group">
+        <label>Reminder (Unpaid)</label>
+        <textarea id="tpl-reminder" rows="7" style="resize:vertical">Hi {name} 👋
+
+Reminder: Your parking rent for *{month}* is due.
+
+📍 Slot: {slot}
+💰 Amount: ₹{amount}
+
+Please pay at your earliest convenience.
+
+Thank you! 🙏
+- AHS Parking</textarea>
+      </div>
+      <div class="form-group">
+        <label>Acknowledgment (Paid)</label>
+        <textarea id="tpl-ack" rows="7" style="resize:vertical">Hi {name} ✅
+
+Payment received! Thank you.
+
+📍 Slot: {slot}
+📅 Month: {month}
+💰 Amount: ₹{amount}
+💳 Mode: {mode}
+
+Your slot is confirmed. 🙏
+- AHS Parking</textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <div class="card-header">
+      <span class="card-title">Send Reminders</span>
+      <div class="flex">
+        <input id="wa-month" type="month" onchange="renderWhatsapp()" style="padding:6px 10px;font-size:12px;" />
+        <button class="btn btn-wa btn-sm" onclick="bulkRemind()">📲 Send All Unpaid</button>
+      </div>
+    </div>
+    <div id="wa-list"><div class="loading"><div class="spinner"></div> Loading...</div></div>
+  </div>
+</div>
+
+</main>
+
+<!-- EDIT CUSTOMER MODAL -->
+<div class="overlay" id="edit-modal">
+  <div class="modal" style="width:560px">
+    <h3>✏️ Edit Customer</h3>
+    <div class="modal-sub">Update customer details below</div>
+    <input type="hidden" id="edit-id" />
+    <div class="form-grid" style="margin-bottom:14px">
+      <div class="form-group"><label>Full Name *</label><input id="edit-name" /></div>
+      <div class="form-group"><label>WhatsApp Number *</label><input id="edit-phone" /></div>
+      <div class="form-group"><label>Type *</label>
+        <select id="edit-type">
+          <option value="bike">🏍️ Bike</option>
+          <option value="car">🚗 Car</option>
+          <option value="daily">📅 Daily</option>
+          <option value="house">🏠 House/Land</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Vehicle No</label><input id="edit-vehicle" style="text-transform:uppercase" /></div>
+      <div class="form-group"><label>Slot / Door No *</label><input id="edit-slot" /></div>
+      <div class="form-group"><label>Monthly Rent (₹) *</label><input id="edit-rent" type="number" /></div>
+      <div class="form-group"><label>Advance Paid (₹)</label><input id="edit-advance" type="number" /></div>
+      <div class="form-group"><label>Customer Since</label><input id="edit-since" /></div>
+      <div class="form-group"><label>Start Date</label><input id="edit-start" type="date" /></div>
+      <div class="form-group"><label>Address / Notes</label><input id="edit-address" /></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeEditModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveEdit()">💾 Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- ACK MODAL -->
+<div class="overlay" id="ack-modal">
+  <div class="modal">
+    <h3>✅ Payment Recorded!</h3>
+    <div class="modal-sub">Send acknowledgment to customer on WhatsApp?</div>
+    <div class="wa-preview">
+      <div class="wa-header">
+        <div class="wa-avatar">🅿️</div>
+        <div class="wa-name">AHS Parking</div>
+      </div>
+      <div class="wa-bubble" id="modal-msg"></div>
+      <div class="wa-time">Now ✓✓</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal()">Skip</button>
+      <button class="btn btn-wa" id="modal-wa-btn">📲 Open WhatsApp</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ===== GOOGLE SHEETS CONFIG =====
+const API_URL = 'https://script.google.com/macros/s/AKfycbwspSFr5ZiAyQ3CWW8_NBkrE0iTQDxyxfAjE3S2Li1tqzrxKDR0KrB7Cl1YaHrGUxMn/exec';
+
+// ===== API HELPERS =====
+async function apiGet(sheet) {
+  const res = await fetch(`${API_URL}?action=get&sheet=${sheet}`);
+  const data = await res.json();
+  return data || [];
+}
+
+async function apiPost(sheet, data) {
+  const id = Date.now().toString(36) + Math.random().toString(36).slice(2);
+  const record = { id, ...data };
+  await fetch(API_URL, {
+    method: 'POST',
+    body: JSON.stringify({ action: 'insert', sheet, data: record })
+  });
+  return record;
+}
+
+async function apiPatch(sheet, id, data) {
+  await fetch(API_URL, {
+    method: 'POST',
+    body: JSON.stringify({ action: 'update', sheet, data: { id, ...data } })
+  });
+}
+
+async function apiDelete(sheet, id) {
+  await fetch(API_URL, {
+    method: 'POST',
+    body: JSON.stringify({ action: 'delete', sheet, data: { id } })
+  });
+}
+
+// ===== STATE =====
+let customers = [];
+let payments = [];
+
+// ===== HELPERS =====
+function curMonth() { return new Date().toISOString().slice(0,7); }
+function monthLabel(m) {
+  if(!m) return '';
+  const [y,mo] = m.split('-');
+  return new Date(y, mo-1).toLocaleString('default',{month:'long',year:'numeric'});
+}
+function fmt(n) { return '₹' + Number(n).toLocaleString('en-IN'); }
+function fmtDate(iso) { return iso ? new Date(iso).toLocaleDateString('en-IN') : '-'; }
+function waLink(phone, msg) { return `https://wa.me/${String(phone||'').replace(/\D/g,'')}?text=${encodeURIComponent(msg)}`; }
+function fillTpl(tpl, data) { return tpl.replace(/{(\w+)}/g, (_,k) => data[k]||''); }
+function cleanRow(row) {
+  // Google Sheets returns all values as strings/numbers - normalize them
+  const r = {};
+  for(const k in row) r[k] = row[k] === undefined || row[k] === null ? '' : String(row[k]).trim();
+  return r;
+}
+
+function toast(msg, type='') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + type;
+  setTimeout(() => t.className = 'toast', 3000);
+}
+
+// ===== LOAD DATA =====
+async function loadAll() {
+  document.getElementById('dash-unpaid').innerHTML = '<div class="loading"><div class="spinner"></div> Loading data...</div>';
+  try {
+    const [rawCustomers, rawPayments] = await Promise.all([
+      apiGet('customers'),
+      apiGet('payments')
+    ]);
+    customers = rawCustomers.map(cleanRow);
+    payments = rawPayments.map(cleanRow);
+    await loadTemplates();
+    updateHeader();
+    renderDashboard();
+    renderCustomers();
+    populatePaymentSelect();
+  } catch(e) {
+    document.getElementById('dash-unpaid').innerHTML = `
+      <div class="empty">
+        <div class="empty-icon">📡</div>
+        <div class="empty-text" style="color:var(--red);font-weight:600;margin-bottom:12px">Failed to load: ${e.message}</div>
+        <button class="btn btn-primary" onclick="loadAll()">🔄 Retry</button>
+      </div>`;
+    toast('❌ ' + e.message, 'error');
+  }
+}
+
+function paidRec(custId, month) {
+  return payments.find(p => String(p.cust_id).trim() === String(custId).trim() && String(p.month).trim() === String(month).trim());
+}
+
+function getCustIdFromSelect() {
+  const sel = document.getElementById('p-cust');
+  if(!sel) return null;
+  const idx = sel.selectedIndex;
+  return customers[idx] ? customers[idx].id : null;
+}
+
+// ===== HEADER =====
+function updateHeader() {
+  const cm = curMonth();
+  const monthly = customers.filter(c => c.type !== 'daily');
+  let collected = 0, pending = 0;
+  monthly.forEach(c => {
+    const p = paidRec(c.id, cm);
+    if(p) collected += +p.amount;
+    else pending += +c.rent;
+  });
+  document.getElementById('h-customers').textContent = customers.length;
+  document.getElementById('h-collected').textContent = fmt(collected);
+  document.getElementById('h-pending').textContent = fmt(pending);
+}
+
+// ===== TABS =====
+function switchTab(name, el) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('page-'+name).classList.add('active');
+  el.classList.add('active');
+  if(name==='customers') renderCustomers();
+  if(name==='payments') { populatePaymentSelect(); document.getElementById('filter-month').value=curMonth(); renderPayments(); }
+  if(name==='whatsapp') { document.getElementById('wa-month').value=curMonth(); renderWhatsapp(); }
+  if(name==='dashboard') renderDashboard();
+}
+
+// ===== DASHBOARD =====
+function renderDashboard() {
+  const cm = curMonth();
+  const monthly = customers.filter(c => c.type !== 'daily');
+  const paid = monthly.filter(c => paidRec(c.id, cm));
+  const unpaid = monthly.filter(c => !paidRec(c.id, cm));
+  const collected = payments.filter(p => String(p.month)===cm).reduce((s,p) => s + +p.amount, 0);
+  const outstanding = unpaid.reduce((s,c) => s + +c.rent, 0);
+  const totalRev = payments.reduce((s,p) => s + +p.amount, 0);
+
+  document.getElementById('summary-grid').innerHTML = `
+    <div class="s-card blue"><div class="s-label">Total Customers</div><div class="s-value">${customers.length}</div></div>
+    <div class="s-card green"><div class="s-label">Paid This Month</div><div class="s-value">${paid.length}</div></div>
+    <div class="s-card red"><div class="s-label">Unpaid</div><div class="s-value">${unpaid.length}</div></div>
+    <div class="s-card green"><div class="s-label">Collected</div><div class="s-value">${fmt(collected)}</div></div>
+    <div class="s-card red"><div class="s-label">Outstanding</div><div class="s-value">${fmt(outstanding)}</div></div>
+    <div class="s-card blue"><div class="s-label">Total Revenue</div><div class="s-value">${fmt(totalRev)}</div></div>
+  `;
+
+  const tpl = document.getElementById('tpl-reminder').value;
+  const container = document.getElementById('dash-unpaid');
+  if(!unpaid.length) {
+    container.innerHTML = `<div class="empty"><div class="empty-icon">🎉</div><div class="empty-text">All customers have paid for ${monthLabel(cm)}!</div></div>`;
+    return;
+  }
+  container.innerHTML = `<div class="pay-grid">${unpaid.map(c => {
+    const msg = fillTpl(tpl, {name:c.name, slot:c.slot, month:monthLabel(cm), amount:c.rent, vehicle:c.vehicle_no||''});
+    return `<div class="pay-card unpaid">
+      <div class="pc-top">
+        <div><div class="pc-name">${c.name}</div><div class="pc-meta">${c.slot}${c.vehicle_no?' · '+c.vehicle_no:''} · ${c.phone}</div></div>
+        <div><div class="pc-amount red">${fmt(c.rent)}</div><span class="badge badge-unpaid">Due</span></div>
+      </div>
+      <div class="pc-actions">
+        <button class="btn btn-wa btn-sm" onclick="window.open('${waLink(c.phone,msg)}')">📲 Remind</button>
+      </div>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+// ===== CUSTOMERS =====
+async function addCustomer() {
+  const name = document.getElementById('c-name').value.trim();
+  const phone = document.getElementById('c-phone').value.trim();
+  const type = document.getElementById('c-type').value;
+  const vehicle_no = document.getElementById('c-vehicle').value.trim().toUpperCase();
+  const slot = document.getElementById('c-slot').value.trim();
+  const rent = document.getElementById('c-rent').value;
+  const advance_paid = document.getElementById('c-advance').value || 0;
+  const customer_since = document.getElementById('c-since').value.trim();
+  const start_date = document.getElementById('c-start').value || '';
+  const address = document.getElementById('c-address').value.trim();
+  if(!name||!phone||!slot||!rent) { toast('⚠️ Fill all required fields', 'error'); return; }
+  try {
+    // Create local record immediately
+    const id = 'c_' + Date.now();
+    const rec = {id, name, phone, type, vehicle_no, slot, rent:String(rent), advance_paid:String(advance_paid), customer_since, start_date, address};
+    customers.unshift(rec);
+    updateHeader();
+    renderCustomers();
+    populatePaymentSelect();
+    renderDashboard();
+    toast('✅ Customer added!', 'success');
+    ['c-name','c-phone','c-slot','c-rent','c-start','c-vehicle','c-advance','c-since','c-address'].forEach(id => document.getElementById(id).value='');
+    // Save to Google Sheets in background
+    apiPost('customers', {id, name, phone, type, vehicle_no, slot, rent:+rent, advance_paid:+advance_paid, customer_since, start_date, address});
+  } catch(e) { toast('❌ Error: ' + e.message, 'error'); }
+}
+
+async function deleteCustomer(id) {
+  if(!confirm('Delete this customer and all their payment records?')) return;
+  try {
+    await apiDelete('customers', id);
+    customers = customers.filter(c => c.id !== id);
+    payments = payments.filter(p => p.cust_id !== id);
+    save(); renderCustomers(); renderDashboard(); populatePaymentSelect();
+    toast('🗑️ Customer removed');
+  } catch(e) { toast('❌ Error: ' + e.message, 'error'); }
+}
+
+function typeLabel(t) {
+  if(t==='bike') return '🏍️ Bike';
+  if(t==='car') return '🚗 Car';
+  if(t==='daily') return '📅 Daily';
+  if(t==='house') return '🏠 House/Land';
+  return t || '-';
+}
+function typeBadgeClass(t) {
+  if(t==='bike') return 'badge-bike';
+  if(t==='car') return 'badge-car';
+  if(t==='house') return 'badge-house';
+  return 'badge-daily';
+}
+
+function renderCustomers() {
+  const q = (document.getElementById('search-c')?.value||'').toLowerCase();
+  const list = customers.filter(c => !q || c.name.toLowerCase().includes(q)||c.phone.includes(q)||c.slot.toLowerCase().includes(q)||(c.vehicle_no||'').toLowerCase().includes(q));
+  const cm = curMonth();
+  const tb = document.getElementById('cust-tbody');
+  if(!tb) return;
+  if(!list.length) { tb.innerHTML=`<tr><td colspan="10"><div class="empty"><div class="empty-icon">👤</div><div class="empty-text">No customers found</div></div></td></tr>`; return; }
+  tb.innerHTML = list.map(c => {
+    const pr = paidRec(c.id, cm);
+    const badge = pr ? `<span class="badge badge-paid">✓ Paid</span>` : `<span class="badge badge-unpaid">✗ Unpaid</span>`;
+    const typeBadge = `<span class="badge ${typeBadgeClass(c.type)}">${typeLabel(c.type)}</span>`;
+    const tpl = document.getElementById('tpl-reminder').value;
+    const msg = fillTpl(tpl, {name:c.name, slot:c.slot, month:monthLabel(cm), amount:c.rent, vehicle:c.vehicle_no||''});
+    return `<tr>
+      <td><strong>${c.name}</strong>${c.address?`<div style="font-size:11px;color:var(--muted)">${c.address}</div>`:''}</td>
+      <td><span class="mono" style="color:var(--accent);font-size:12px">${c.phone}</span></td>
+      <td>${typeBadge}</td>
+      <td><span class="mono" style="font-size:12px">${c.vehicle_no||'-'}</span></td>
+      <td><span class="mono">${c.slot}</span></td>
+      <td><span class="mono" style="color:var(--green);font-weight:700">${fmt(c.rent)}</span></td>
+      <td><span class="mono" style="font-size:12px;color:var(--yellow)">${+c.advance_paid>0?fmt(c.advance_paid):'-'}</span></td>
+      <td style="color:var(--muted);font-size:12px">${c.customer_since||c.start_date||'-'}</td>
+      <td>${badge}</td>
+      <td><div class="flex">
+        <button class="btn btn-outline btn-xs" onclick="openEditModal('${c.id}')">✏️</button>
+        ${!pr ? `<button class="btn btn-wa btn-xs" onclick="window.open('${waLink(c.phone,msg)}')">📲</button>` : ''}
+        <button class="btn btn-danger btn-xs" onclick="deleteCustomer('${c.id}')">🗑️</button>
+      </div></td>
+    </tr>`;
+  }).join('');
+}
+
+// ===== EDIT CUSTOMER =====
+function openEditModal(id) {
+  const c = customers.find(x => x.id === id);
+  if(!c) return;
+  document.getElementById('edit-id').value = c.id;
+  document.getElementById('edit-name').value = c.name || '';
+  document.getElementById('edit-phone').value = c.phone || '';
+  document.getElementById('edit-type').value = c.type || 'bike';
+  document.getElementById('edit-vehicle').value = c.vehicle_no || '';
+  document.getElementById('edit-slot').value = c.slot || '';
+  document.getElementById('edit-rent').value = c.rent || '';
+  document.getElementById('edit-advance').value = c.advance_paid || '';
+  document.getElementById('edit-since').value = c.customer_since || '';
+  document.getElementById('edit-start').value = c.start_date || '';
+  document.getElementById('edit-address').value = c.address || '';
+  document.getElementById('edit-modal').classList.add('open');
+}
+function closeEditModal() { document.getElementById('edit-modal').classList.remove('open'); }
+
+async function saveEdit() {
+  const id = document.getElementById('edit-id').value;
+  const name = document.getElementById('edit-name').value.trim();
+  const phone = document.getElementById('edit-phone').value.trim();
+  const type = document.getElementById('edit-type').value;
+  const vehicle_no = document.getElementById('edit-vehicle').value.trim().toUpperCase();
+  const slot = document.getElementById('edit-slot').value.trim();
+  const rent = document.getElementById('edit-rent').value;
+  const advance_paid = document.getElementById('edit-advance').value || 0;
+  const customer_since = document.getElementById('edit-since').value.trim();
+  const start_date = document.getElementById('edit-start').value || null;
+  const address = document.getElementById('edit-address').value.trim();
+  if(!name||!phone||!slot||!rent) { toast('⚠️ Fill all required fields', 'error'); return; }
+  try {
+    await apiPatch('customers', id, {name,phone,type,vehicle_no,slot,rent:+rent,advance_paid:+advance_paid,customer_since,start_date:start_date||'',address});
+    const idx = customers.findIndex(c => c.id === id);
+    if(idx >= 0) customers[idx] = {...customers[idx], name,phone,type,vehicle_no,slot,rent,advance_paid,customer_since,start_date,address};
+    closeEditModal();
+    toast('✅ Customer updated!', 'success');
+    renderCustomers(); renderDashboard(); populatePaymentSelect();
+  } catch(e) { toast('❌ Error: ' + e.message, 'error'); }
+}
+
+// ===== PAYMENTS =====
+function populatePaymentSelect() {
+  const sel = document.getElementById('p-cust');
+  if(!sel) return;
+  const prevId = sel.value; // remember current selection
+  sel.innerHTML = customers.map(c=>`<option value="${c.id}">${c.name} — ${c.slot}</option>`).join('');
+  // Restore previous selection if possible
+  if(prevId) sel.value = prevId;
+  document.getElementById('p-month').value = curMonth();
+  showPaymentStatus();
+}
+
+function showPaymentStatus() {
+  const custSel = document.getElementById('p-cust');
+  const monthEl = document.getElementById('p-month');
+  const box = document.getElementById('payment-status-box');
+  if(!box || !custSel || !monthEl) return;
+
+  box.style.display = 'none';
+  box.innerHTML = '';
+  document.getElementById('p-amount').value = '';
+
+  const custId = custSel.value;
+  const month = monthEl.value;
+  if(!custId || !month) return;
+
+  const c = customers.find(x => String(x.id).trim() === String(custId).trim());
+  if(!c) return;
+
+  // Build month list from Jan 2026 to selected month
+  const allMonths = [];
+  let d = new Date('2026-01-01');
+  const endD = new Date(month + '-01');
+  while(d <= endD) {
+    allMonths.push(d.toISOString().slice(0,7));
+    d.setMonth(d.getMonth() + 1);
+  }
+
+  const unpaidMonths = allMonths.filter(m => !paidRec(custId, m));
+  const paidMonths = allMonths.filter(m => paidRec(custId, m));
+  const thisMonthPaid = paidRec(custId, month);
+  const arrears = unpaidMonths.filter(m => m !== month);
+  const totalArrear = arrears.length * +c.rent;
+  const totalDue = unpaidMonths.length * +c.rent;
+
+  // Auto fill amount
+  document.getElementById('p-amount').value = totalDue > 0 ? totalDue : c.rent;
+
+  let html = '';
+  if(thisMonthPaid) {
+    html = `<div style="background:var(--green-light);border:1.5px solid #6ee7b7;border-radius:10px;padding:16px">
+      <div style="font-weight:700;color:var(--green);font-size:14px;margin-bottom:8px">✅ Already Paid for ${monthLabel(month)}</div>
+      <div style="font-size:13px;color:var(--muted)">Amount paid: <strong style="color:var(--green)">${fmt(thisMonthPaid.amount)}</strong> via ${thisMonthPaid.mode}</div>
+    </div>`;
+  } else {
+    html = `<div style="background:#fff8f0;border:1.5px solid #fcd34d;border-radius:10px;padding:16px">
+      <div style="font-weight:700;font-size:14px;margin-bottom:12px;color:#92400e">💰 Payment Summary for ${c.name}</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px">
+        <div style="background:#fff;border-radius:8px;padding:12px;border:1px solid var(--border)">
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:4px">Monthly Rent</div>
+          <div style="font-size:18px;font-weight:800;font-family:var(--mono);color:var(--accent)">${fmt(c.rent)}</div>
+        </div>
+        <div style="background:#fff;border-radius:8px;padding:12px;border:1px solid var(--border)">
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:4px">Arrears (${arrears.length} months)</div>
+          <div style="font-size:18px;font-weight:800;font-family:var(--mono);color:${arrears.length>0?'var(--red)':'var(--green)'}">${fmt(totalArrear)}</div>
+        </div>
+        <div style="background:#fff;border-radius:8px;padding:12px;border:1px solid var(--border)">
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:4px">Total Due Now</div>
+          <div style="font-size:18px;font-weight:800;font-family:var(--mono);color:var(--red)">${fmt(totalDue)}</div>
+        </div>
+      </div>
+      ${arrears.length > 0 ? `<div style="font-size:12px;color:var(--red);margin-bottom:8px">⚠️ Unpaid months: <strong>${arrears.map(m=>monthLabel(m)).join(', ')}</strong></div>` : ''}
+      <div style="font-size:12px;color:var(--muted)">✅ Paid months: ${paidMonths.length > 0 ? paidMonths.map(m=>monthLabel(m)).join(', ') : 'None yet'}</div>
+    </div>`;
+  }
+
+  box.style.display = 'block';
+  box.innerHTML = html;
+}
+
+async function recordPayment(sendWa) {
+  const sel = document.getElementById('p-cust');
+  const custId = sel.value;
+  const c = customers.find(x => String(x.id).trim() === String(custId).trim());
+  if(!c) { toast('⚠️ Select a customer', 'error'); return; }
+  const month = document.getElementById('p-month').value;
+  const amount = document.getElementById('p-amount').value;
+  const mode = document.getElementById('p-mode').value;
+  const notes = document.getElementById('p-notes').value;
+  if(!month||!amount) { toast('⚠️ Fill all required fields', 'error'); return; }
+
+  try {
+    const existing = payments.find(p=> String(p.cust_id).trim() === String(custId).trim() && String(p.month).trim() === String(month).trim());
+    let rec;
+    if(existing) {
+      // Update local state immediately
+      existing.amount = String(amount);
+      existing.mode = mode;
+      existing.notes = notes;
+      existing.date = new Date().toISOString();
+      rec = existing;
+      // Save to Google Sheets in background
+      apiPatch('payments', existing.id, {amount:+amount,mode,notes,date:existing.date});
+    } else {
+      // Create new record with predictable ID
+      const id = 'p_' + Date.now();
+      rec = {id, cust_id:String(custId), month:String(month), amount:String(amount), mode, notes, date:new Date().toISOString()};
+      // Update local state immediately
+      payments.unshift(rec);
+      // Save to Google Sheets in background
+      apiPost('payments', {id, cust_id:custId, month, amount:+amount, mode, notes, date:rec.date});
+    }
+
+    toast('✅ Payment recorded!', 'success');
+    document.getElementById('p-amount').value = '';
+    document.getElementById('p-notes').value = '';
+
+    // Update views - do NOT call populatePaymentSelect or renderCustomers as it resets dropdown
+    updateHeader();
+    renderPayments();
+    renderDashboard();
+    showPaymentStatus();
+
+    if(sendWa) {
+      const c = customers.find(x => String(x.id).trim() === String(custId).trim());
+      if(c) {
+        const tpl = document.getElementById('tpl-ack').value;
+        const msg = fillTpl(tpl, {name:c.name, slot:c.slot, month:monthLabel(month), amount, mode});
+        document.getElementById('modal-msg').textContent = msg;
+        document.getElementById('modal-wa-btn').onclick = () => { window.open(waLink(c.phone,msg)); closeModal(); };
+        document.getElementById('ack-modal').classList.add('open');
+      }
+    }
+  } catch(e) { toast('❌ Error: ' + e.message, 'error'); }
+}
+
+function renderPayments() {
+  const fm = document.getElementById('filter-month')?.value || '';
+  let list = fm ? payments.filter(p=>String(p.month)===String(fm)) : [...payments];
+  list = list.sort((a,b) => new Date(b.date||0) - new Date(a.date||0));
+  const tplAck = document.getElementById('tpl-ack').value;
+  const tb = document.getElementById('pay-tbody');
+  if(!tb) return;
+  if(!list.length) { tb.innerHTML=`<tr><td colspan="7"><div class="empty"><div class="empty-icon">💳</div><div class="empty-text">No payments found</div></div></td></tr>`; return; }
+  tb.innerHTML = list.map(p => {
+    const c = customers.find(x => String(x.id) === String(p.cust_id)) || {name:'Unknown',slot:'-',phone:''};
+    const msg = fillTpl(tplAck, {name:c.name, slot:c.slot, month:monthLabel(p.month), amount:p.amount, mode:p.mode});
+    return `<tr>
+      <td><strong>${c.name}</strong></td>
+      <td><span class="mono">${c.slot}</span></td>
+      <td style="color:var(--muted)">${monthLabel(p.month)}</td>
+      <td><span class="mono" style="color:var(--green);font-weight:700">${fmt(p.amount)}</span></td>
+      <td><span style="font-size:12px;color:var(--muted)">${p.mode}</span></td>
+      <td style="color:var(--muted);font-size:12px">${fmtDate(p.date)}</td>
+      <td><button class="btn btn-wa btn-xs" onclick="window.open('${waLink(c.phone,msg)}')">📲 Re-send</button></td>
+    </tr>`;
+  }).join('');
+}
+
+// ===== WHATSAPP =====
+function renderWhatsapp() {
+  const month = document.getElementById('wa-month')?.value || curMonth();
+  const tpl = document.getElementById('tpl-reminder').value;
+  const tplAck = document.getElementById('tpl-ack').value;
+  const container = document.getElementById('wa-list');
+  const monthly = customers.filter(c => c.type !== 'daily');
+  const unpaid = monthly.filter(c => !paidRec(c.id, month));
+  const paid = monthly.filter(c => paidRec(c.id, month));
+
+  if(!customers.length) { container.innerHTML=`<div class="empty"><div class="empty-icon">👤</div><div class="empty-text">Add customers first</div></div>`; return; }
+
+  let html = '<div class="pay-grid">';
+  unpaid.forEach(c => {
+    const msg = fillTpl(tpl, {name:c.name, slot:c.slot, month:monthLabel(month), amount:c.rent, vehicle:c.vehicle_no||''});
+    html += `<div class="pay-card unpaid">
+      <div class="pc-top">
+        <div><div class="pc-name">${c.name}</div><div class="pc-meta">${c.slot}${c.vehicle_no?' · '+c.vehicle_no:''} · ${c.phone}</div></div>
+        <div><div class="pc-amount red">${fmt(c.rent)}</div><span class="badge badge-unpaid">Due</span></div>
+      </div>
+      <div class="pc-actions">
+        <button class="btn btn-wa btn-sm" onclick="window.open('${waLink(c.phone,msg)}')">📲 Send Reminder</button>
+      </div>
+    </div>`;
+  });
+  paid.forEach(c => {
+    const pr = paidRec(c.id, month);
+    const msg = fillTpl(tplAck, {name:c.name, slot:c.slot, month:monthLabel(month), amount:pr?.amount||c.rent, mode:pr?.mode||'UPI'});
+    html += `<div class="pay-card paid">
+      <div class="pc-top">
+        <div><div class="pc-name">${c.name}</div><div class="pc-meta">${c.slot}</div></div>
+        <div><div class="pc-amount green">${fmt(pr?.amount||c.rent)}</div><span class="badge badge-paid">✓ Paid</span></div>
+      </div>
+      <div class="pc-actions">
+        <button class="btn btn-outline btn-sm" onclick="window.open('${waLink(c.phone,msg)}')">📲 Re-send Ack</button>
+      </div>
+    </div>`;
+  });
+  html += '</div>';
+  if(!monthly.length) html = `<div class="empty"><div class="empty-icon">📲</div><div class="empty-text">No monthly customers yet</div></div>`;
+  container.innerHTML = html;
+}
+
+function bulkRemind() {
+  const month = document.getElementById('wa-month')?.value || curMonth();
+  const tpl = document.getElementById('tpl-reminder').value;
+  const unpaid = customers.filter(c => c.type!=='daily' && !paidRec(c.id, month));
+  if(!unpaid.length) { toast('🎉 All paid for this month!', 'success'); return; }
+  if(!confirm(`Send reminders to ${unpaid.length} unpaid customers?`)) return;
+  unpaid.forEach((c,i) => {
+    setTimeout(() => {
+      const msg = fillTpl(tpl, {name:c.name, slot:c.slot, month:monthLabel(month), amount:c.rent});
+      window.open(waLink(c.phone, msg));
+    }, i * 600);
+  });
+}
+
+function closeModal() { document.getElementById('ack-modal').classList.remove('open'); }
+
+function save() { updateHeader(); }
+
+// ===== SAVE & LOAD TEMPLATES (Google Sheets) =====
+async function saveTemplates() {
+  const reminder = document.getElementById('tpl-reminder').value;
+  const ack = document.getElementById('tpl-ack').value;
+  try {
+    // Check if settings row exists
+    const existing = await apiGet('settings');
+    if(existing.length > 0) {
+      await apiPatch('settings', existing[0].id, {tpl_reminder: reminder, tpl_ack: ack});
+    } else {
+      await apiPost('settings', {tpl_reminder: reminder, tpl_ack: ack});
+    }
+    // Also save locally as backup
+    localStorage.setItem('tpl_reminder', reminder);
+    localStorage.setItem('tpl_ack', ack);
+    toast('✅ Templates saved permanently!', 'success');
+  } catch(e) {
+    // Fallback to localStorage if error
+    localStorage.setItem('tpl_reminder', reminder);
+    localStorage.setItem('tpl_ack', ack);
+    toast('✅ Templates saved!', 'success');
+  }
+}
+
+async function loadTemplates() {
+  try {
+    const settings = await apiGet('settings');
+    if(settings.length > 0) {
+      const s = settings[0];
+      if(s.tpl_reminder) document.getElementById('tpl-reminder').value = s.tpl_reminder;
+      if(s.tpl_ack) document.getElementById('tpl-ack').value = s.tpl_ack;
+      return;
+    }
+  } catch(e) {}
+  // Fallback to localStorage
+  const reminder = localStorage.getItem('tpl_reminder');
+  const ack = localStorage.getItem('tpl_ack');
+  if(reminder) document.getElementById('tpl-reminder').value = reminder;
+  if(ack) document.getElementById('tpl-ack').value = ack;
+}
+
+// ===== INIT =====
+document.getElementById('c-start').value = new Date().toISOString().slice(0,10);
+document.getElementById('filter-month') && (document.getElementById('filter-month').value = curMonth());
+loadAll();
+</script>
+</body>
+</html>
