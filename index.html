@@ -430,116 +430,109 @@ Your slot is confirmed. 🙏
 
 <div class="toast" id="toast"></div>
 
+
+<div class="toast" id="toast"></div>
+
 <script>
-// ===== GOOGLE SHEETS CONFIG =====
+// ===== CONFIG =====
 const API_URL = 'https://script.google.com/macros/s/AKfycbwspSFr5ZiAyQ3CWW8_NBkrE0iTQDxyxfAjE3S2Li1tqzrxKDR0KrB7Cl1YaHrGUxMn/exec';
 
-// ===== API HELPERS =====
-async function apiGet(sheet) {
-  const res = await fetch(`${API_URL}?action=get&sheet=${sheet}`);
-  const data = await res.json();
-  return data || [];
+// ===== LOCAL STATE (source of truth) =====
+let customers = JSON.parse(localStorage.getItem('ahs_customers') || '[]');
+let payments = JSON.parse(localStorage.getItem('ahs_payments') || '[]');
+
+function saveLocal() {
+  localStorage.setItem('ahs_customers', JSON.stringify(customers));
+  localStorage.setItem('ahs_payments', JSON.stringify(payments));
 }
 
-async function apiPost(sheet, data) {
-  const id = Date.now().toString(36) + Math.random().toString(36).slice(2);
-  const record = { id, ...data };
-  await fetch(API_URL, {
-    method: 'POST',
-    body: JSON.stringify({ action: 'insert', sheet, data: record })
-  });
-  return record;
+// ===== GOOGLE SHEETS SYNC (background only) =====
+async function gsGet(sheet) {
+  try {
+    const res = await fetch(`${API_URL}?action=get&sheet=${sheet}`);
+    return await res.json() || [];
+  } catch(e) { return []; }
 }
-
-async function apiPatch(sheet, id, data) {
-  await fetch(API_URL, {
-    method: 'POST',
-    body: JSON.stringify({ action: 'update', sheet, data: { id, ...data } })
-  });
+async function gsPost(sheet, data) {
+  try {
+    await fetch(API_URL, { method:'POST', body: JSON.stringify({action:'insert', sheet, data}) });
+  } catch(e) {}
 }
-
-async function apiDelete(sheet, id) {
-  await fetch(API_URL, {
-    method: 'POST',
-    body: JSON.stringify({ action: 'delete', sheet, data: { id } })
-  });
+async function gsPatch(sheet, id, data) {
+  try {
+    await fetch(API_URL, { method:'POST', body: JSON.stringify({action:'update', sheet, data:{id,...data}}) });
+  } catch(e) {}
 }
-
-// ===== STATE =====
-let customers = [];
-let payments = [];
+async function gsDelete(sheet, id) {
+  try {
+    await fetch(API_URL, { method:'POST', body: JSON.stringify({action:'delete', sheet, data:{id}}) });
+  } catch(e) {}
+}
 
 // ===== HELPERS =====
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
 function curMonth() { return new Date().toISOString().slice(0,7); }
 function monthLabel(m) {
   if(!m) return '';
   const [y,mo] = m.split('-');
   return new Date(y, mo-1).toLocaleString('default',{month:'long',year:'numeric'});
 }
-function fmt(n) { return '₹' + Number(n).toLocaleString('en-IN'); }
-function fmtDate(iso) { return iso ? new Date(iso).toLocaleDateString('en-IN') : '-'; }
+function fmt(n) { return '₹' + Number(n||0).toLocaleString('en-IN'); }
 function waLink(phone, msg) { return `https://wa.me/${String(phone||'').replace(/\D/g,'')}?text=${encodeURIComponent(msg)}`; }
 function fillTpl(tpl, data) { return tpl.replace(/{(\w+)}/g, (_,k) => data[k]||''); }
-function cleanRow(row) {
-  // Google Sheets returns all values as strings/numbers - normalize them
-  const r = {};
-  for(const k in row) r[k] = row[k] === undefined || row[k] === null ? '' : String(row[k]).trim();
-  return r;
+function paidRec(custId, month) {
+  return payments.find(p => p.cust_id === custId && p.month === month);
 }
-
 function toast(msg, type='') {
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.className = 'toast show ' + type;
   setTimeout(() => t.className = 'toast', 3000);
 }
+function typeLabel(t) {
+  return {bike:'🏍️ Bike', car:'🚗 Car', daily:'📅 Daily', house:'🏠 House/Land'}[t] || t || '-';
+}
+function typeBadgeClass(t) {
+  return {bike:'badge-bike', car:'badge-car', house:'badge-house'}[t] || 'badge-daily';
+}
+function fmtDate(iso) { try { return new Date(iso).toLocaleDateString('en-IN'); } catch(e) { return '-'; } }
 
-// ===== LOAD DATA =====
+// ===== LOAD FROM GOOGLE SHEETS (on startup only) =====
 async function loadAll() {
-  document.getElementById('dash-unpaid').innerHTML = '<div class="loading"><div class="spinner"></div> Loading data...</div>';
-  try {
-    const [rawCustomers, rawPayments] = await Promise.all([
-      apiGet('customers'),
-      apiGet('payments')
-    ]);
-    customers = rawCustomers.map(cleanRow);
-    payments = rawPayments.map(cleanRow);
-    await loadTemplates();
-    updateHeader();
-    renderDashboard();
-    renderCustomers();
-    populatePaymentSelect();
-  } catch(e) {
-    document.getElementById('dash-unpaid').innerHTML = `
-      <div class="empty">
-        <div class="empty-icon">📡</div>
-        <div class="empty-text" style="color:var(--red);font-weight:600;margin-bottom:12px">Failed to load: ${e.message}</div>
-        <button class="btn btn-primary" onclick="loadAll()">🔄 Retry</button>
-      </div>`;
-    toast('❌ ' + e.message, 'error');
+  document.getElementById('dash-unpaid').innerHTML = '<div class="loading"><div class="spinner"></div> Loading...</div>';
+  
+  // If we have local data, render immediately
+  if(customers.length > 0) {
+    renderAll();
   }
+
+  // Then sync from Google Sheets in background
+  try {
+    const [rawC, rawP] = await Promise.all([gsGet('customers'), gsGet('payments')]);
+    if(rawC.length > 0 || rawP.length > 0) {
+      customers = rawC.map(r => { const o={}; for(const k in r) o[k]=String(r[k]||'').trim(); return o; });
+      payments = rawP.map(r => { const o={}; for(const k in r) o[k]=String(r[k]||'').trim(); return o; });
+      saveLocal();
+    }
+  } catch(e) {}
+  
+  renderAll();
 }
 
-function paidRec(custId, month) {
-  return payments.find(p => String(p.cust_id).trim() === String(custId).trim() && String(p.month).trim() === String(month).trim());
-}
-
-function getCustIdFromSelect() {
-  const sel = document.getElementById('p-cust');
-  if(!sel) return null;
-  const idx = sel.selectedIndex;
-  return customers[idx] ? customers[idx].id : null;
+function renderAll() {
+  updateHeader();
+  renderDashboard();
+  renderCustomers();
+  populatePaymentSelect();
 }
 
 // ===== HEADER =====
 function updateHeader() {
   const cm = curMonth();
-  const monthly = customers.filter(c => c.type !== 'daily');
-  let collected = 0, pending = 0;
-  monthly.forEach(c => {
+  let collected=0, pending=0;
+  customers.filter(c=>c.type!=='daily').forEach(c => {
     const p = paidRec(c.id, cm);
-    if(p) collected += +p.amount;
-    else pending += +c.rent;
+    if(p) collected += +p.amount; else pending += +c.rent;
   });
   document.getElementById('h-customers').textContent = customers.length;
   document.getElementById('h-collected').textContent = fmt(collected);
@@ -561,12 +554,12 @@ function switchTab(name, el) {
 // ===== DASHBOARD =====
 function renderDashboard() {
   const cm = curMonth();
-  const monthly = customers.filter(c => c.type !== 'daily');
-  const paid = monthly.filter(c => paidRec(c.id, cm));
-  const unpaid = monthly.filter(c => !paidRec(c.id, cm));
-  const collected = payments.filter(p => String(p.month)===cm).reduce((s,p) => s + +p.amount, 0);
-  const outstanding = unpaid.reduce((s,c) => s + +c.rent, 0);
-  const totalRev = payments.reduce((s,p) => s + +p.amount, 0);
+  const monthly = customers.filter(c=>c.type!=='daily');
+  const paid = monthly.filter(c=>paidRec(c.id,cm));
+  const unpaid = monthly.filter(c=>!paidRec(c.id,cm));
+  const collected = payments.filter(p=>p.month===cm).reduce((s,p)=>s+(+p.amount),0);
+  const outstanding = unpaid.reduce((s,c)=>s+(+c.rent),0);
+  const totalRev = payments.reduce((s,p)=>s+(+p.amount),0);
 
   document.getElementById('summary-grid').innerHTML = `
     <div class="s-card blue"><div class="s-label">Total Customers</div><div class="s-value">${customers.length}</div></div>
@@ -580,14 +573,14 @@ function renderDashboard() {
   const tpl = document.getElementById('tpl-reminder').value;
   const container = document.getElementById('dash-unpaid');
   if(!unpaid.length) {
-    container.innerHTML = `<div class="empty"><div class="empty-icon">🎉</div><div class="empty-text">All customers have paid for ${monthLabel(cm)}!</div></div>`;
+    container.innerHTML = `<div class="empty"><div class="empty-icon">🎉</div><div class="empty-text">All customers paid for ${monthLabel(cm)}!</div></div>`;
     return;
   }
   container.innerHTML = `<div class="pay-grid">${unpaid.map(c => {
     const msg = fillTpl(tpl, {name:c.name, slot:c.slot, month:monthLabel(cm), amount:c.rent, vehicle:c.vehicle_no||''});
     return `<div class="pay-card unpaid">
       <div class="pc-top">
-        <div><div class="pc-name">${c.name}</div><div class="pc-meta">${c.slot}${c.vehicle_no?' · '+c.vehicle_no:''} · ${c.phone}</div></div>
+        <div><div class="pc-name">${c.name}</div><div class="pc-meta">${c.slot} · ${c.phone}</div></div>
         <div><div class="pc-amount red">${fmt(c.rent)}</div><span class="badge badge-unpaid">Due</span></div>
       </div>
       <div class="pc-actions">
@@ -598,63 +591,10 @@ function renderDashboard() {
 }
 
 // ===== CUSTOMERS =====
-async function addCustomer() {
-  const name = document.getElementById('c-name').value.trim();
-  const phone = document.getElementById('c-phone').value.trim();
-  const type = document.getElementById('c-type').value;
-  const vehicle_no = document.getElementById('c-vehicle').value.trim().toUpperCase();
-  const slot = document.getElementById('c-slot').value.trim();
-  const rent = document.getElementById('c-rent').value;
-  const advance_paid = document.getElementById('c-advance').value || 0;
-  const customer_since = document.getElementById('c-since').value.trim();
-  const start_date = document.getElementById('c-start').value || '';
-  const address = document.getElementById('c-address').value.trim();
-  if(!name||!phone||!slot||!rent) { toast('⚠️ Fill all required fields', 'error'); return; }
-  try {
-    // Create local record immediately
-    const id = 'c_' + Date.now();
-    const rec = {id, name, phone, type, vehicle_no, slot, rent:String(rent), advance_paid:String(advance_paid), customer_since, start_date, address};
-    customers.unshift(rec);
-    updateHeader();
-    renderCustomers();
-    populatePaymentSelect();
-    renderDashboard();
-    toast('✅ Customer added!', 'success');
-    ['c-name','c-phone','c-slot','c-rent','c-start','c-vehicle','c-advance','c-since','c-address'].forEach(id => document.getElementById(id).value='');
-    // Save to Google Sheets in background
-    apiPost('customers', {id, name, phone, type, vehicle_no, slot, rent:+rent, advance_paid:+advance_paid, customer_since, start_date, address});
-  } catch(e) { toast('❌ Error: ' + e.message, 'error'); }
-}
-
-async function deleteCustomer(id) {
-  if(!confirm('Delete this customer and all their payment records?')) return;
-  try {
-    await apiDelete('customers', id);
-    customers = customers.filter(c => c.id !== id);
-    payments = payments.filter(p => p.cust_id !== id);
-    save(); renderCustomers(); renderDashboard(); populatePaymentSelect();
-    toast('🗑️ Customer removed');
-  } catch(e) { toast('❌ Error: ' + e.message, 'error'); }
-}
-
-function typeLabel(t) {
-  if(t==='bike') return '🏍️ Bike';
-  if(t==='car') return '🚗 Car';
-  if(t==='daily') return '📅 Daily';
-  if(t==='house') return '🏠 House/Land';
-  return t || '-';
-}
-function typeBadgeClass(t) {
-  if(t==='bike') return 'badge-bike';
-  if(t==='car') return 'badge-car';
-  if(t==='house') return 'badge-house';
-  return 'badge-daily';
-}
-
 function renderCustomers() {
   const q = (document.getElementById('search-c')?.value||'').toLowerCase();
-  const list = customers.filter(c => !q || c.name.toLowerCase().includes(q)||c.phone.includes(q)||c.slot.toLowerCase().includes(q)||(c.vehicle_no||'').toLowerCase().includes(q));
   const cm = curMonth();
+  const list = customers.filter(c => !q || c.name.toLowerCase().includes(q)||c.phone.includes(q)||c.slot.toLowerCase().includes(q)||(c.vehicle_no||'').toLowerCase().includes(q));
   const tb = document.getElementById('cust-tbody');
   if(!tb) return;
   if(!list.length) { tb.innerHTML=`<tr><td colspan="10"><div class="empty"><div class="empty-icon">👤</div><div class="empty-text">No customers found</div></div></td></tr>`; return; }
@@ -676,28 +616,63 @@ function renderCustomers() {
       <td>${badge}</td>
       <td><div class="flex">
         <button class="btn btn-outline btn-xs" onclick="openEditModal('${c.id}')">✏️</button>
-        ${!pr ? `<button class="btn btn-wa btn-xs" onclick="window.open('${waLink(c.phone,msg)}')">📲</button>` : ''}
+        ${!pr?`<button class="btn btn-wa btn-xs" onclick="window.open('${waLink(c.phone,msg)}')">📲</button>`:''}
         <button class="btn btn-danger btn-xs" onclick="deleteCustomer('${c.id}')">🗑️</button>
       </div></td>
     </tr>`;
   }).join('');
 }
 
+async function addCustomer() {
+  const name = document.getElementById('c-name').value.trim();
+  const phone = document.getElementById('c-phone').value.trim();
+  const type = document.getElementById('c-type').value;
+  const vehicle_no = document.getElementById('c-vehicle').value.trim().toUpperCase();
+  const slot = document.getElementById('c-slot').value.trim();
+  const rent = document.getElementById('c-rent').value;
+  const advance_paid = document.getElementById('c-advance').value || '0';
+  const customer_since = document.getElementById('c-since').value.trim();
+  const start_date = document.getElementById('c-start').value || '';
+  const address = document.getElementById('c-address').value.trim();
+  if(!name||!phone||!slot||!rent) { toast('⚠️ Fill required fields', 'error'); return; }
+  
+  const id = uid();
+  const rec = {id, name, phone, type, vehicle_no, slot, rent, advance_paid, customer_since, start_date, address};
+  customers.unshift(rec);
+  saveLocal();
+  renderAll();
+  toast('✅ Customer added!', 'success');
+  ['c-name','c-phone','c-slot','c-rent','c-vehicle','c-advance','c-since','c-address'].forEach(i => document.getElementById(i).value='');
+  
+  // Sync to Google Sheets in background
+  gsPost('customers', rec);
+}
+
+async function deleteCustomer(id) {
+  if(!confirm('Delete this customer and all payments?')) return;
+  customers = customers.filter(c=>c.id!==id);
+  payments = payments.filter(p=>p.cust_id!==id);
+  saveLocal();
+  renderAll();
+  toast('🗑️ Customer removed');
+  gsDelete('customers', id);
+}
+
 // ===== EDIT CUSTOMER =====
 function openEditModal(id) {
-  const c = customers.find(x => x.id === id);
+  const c = customers.find(x=>x.id===id);
   if(!c) return;
   document.getElementById('edit-id').value = c.id;
-  document.getElementById('edit-name').value = c.name || '';
-  document.getElementById('edit-phone').value = c.phone || '';
-  document.getElementById('edit-type').value = c.type || 'bike';
-  document.getElementById('edit-vehicle').value = c.vehicle_no || '';
-  document.getElementById('edit-slot').value = c.slot || '';
-  document.getElementById('edit-rent').value = c.rent || '';
-  document.getElementById('edit-advance').value = c.advance_paid || '';
-  document.getElementById('edit-since').value = c.customer_since || '';
-  document.getElementById('edit-start').value = c.start_date || '';
-  document.getElementById('edit-address').value = c.address || '';
+  document.getElementById('edit-name').value = c.name||'';
+  document.getElementById('edit-phone').value = c.phone||'';
+  document.getElementById('edit-type').value = c.type||'bike';
+  document.getElementById('edit-vehicle').value = c.vehicle_no||'';
+  document.getElementById('edit-slot').value = c.slot||'';
+  document.getElementById('edit-rent').value = c.rent||'';
+  document.getElementById('edit-advance').value = c.advance_paid||'';
+  document.getElementById('edit-since').value = c.customer_since||'';
+  document.getElementById('edit-start').value = c.start_date||'';
+  document.getElementById('edit-address').value = c.address||'';
   document.getElementById('edit-modal').classList.add('open');
 }
 function closeEditModal() { document.getElementById('edit-modal').classList.remove('open'); }
@@ -710,167 +685,147 @@ async function saveEdit() {
   const vehicle_no = document.getElementById('edit-vehicle').value.trim().toUpperCase();
   const slot = document.getElementById('edit-slot').value.trim();
   const rent = document.getElementById('edit-rent').value;
-  const advance_paid = document.getElementById('edit-advance').value || 0;
+  const advance_paid = document.getElementById('edit-advance').value||'0';
   const customer_since = document.getElementById('edit-since').value.trim();
-  const start_date = document.getElementById('edit-start').value || null;
+  const start_date = document.getElementById('edit-start').value||'';
   const address = document.getElementById('edit-address').value.trim();
-  if(!name||!phone||!slot||!rent) { toast('⚠️ Fill all required fields', 'error'); return; }
-  try {
-    await apiPatch('customers', id, {name,phone,type,vehicle_no,slot,rent:+rent,advance_paid:+advance_paid,customer_since,start_date:start_date||'',address});
-    const idx = customers.findIndex(c => c.id === id);
-    if(idx >= 0) customers[idx] = {...customers[idx], name,phone,type,vehicle_no,slot,rent,advance_paid,customer_since,start_date,address};
-    closeEditModal();
-    toast('✅ Customer updated!', 'success');
-    renderCustomers(); renderDashboard(); populatePaymentSelect();
-  } catch(e) { toast('❌ Error: ' + e.message, 'error'); }
+  if(!name||!phone||!slot||!rent) { toast('⚠️ Fill required fields', 'error'); return; }
+  
+  const idx = customers.findIndex(c=>c.id===id);
+  if(idx>=0) customers[idx] = {...customers[idx], name, phone, type, vehicle_no, slot, rent, advance_paid, customer_since, start_date, address};
+  saveLocal();
+  closeEditModal();
+  renderAll();
+  toast('✅ Customer updated!', 'success');
+  gsPatch('customers', id, {name, phone, type, vehicle_no, slot, rent, advance_paid, customer_since, start_date, address});
 }
 
 // ===== PAYMENTS =====
 function populatePaymentSelect() {
   const sel = document.getElementById('p-cust');
   if(!sel) return;
-  const prevId = sel.value; // remember current selection
+  const prevId = sel.getAttribute('data-selected') || '';
   sel.innerHTML = customers.map(c=>`<option value="${c.id}">${c.name} — ${c.slot}</option>`).join('');
-  // Restore previous selection if possible
   if(prevId) sel.value = prevId;
   document.getElementById('p-month').value = curMonth();
   showPaymentStatus();
 }
 
 function showPaymentStatus() {
-  const custSel = document.getElementById('p-cust');
-  const monthEl = document.getElementById('p-month');
+  const sel = document.getElementById('p-cust');
   const box = document.getElementById('payment-status-box');
-  if(!box || !custSel || !monthEl) return;
+  if(!sel||!box) return;
+
+  const custId = sel.value;
+  sel.setAttribute('data-selected', custId);
+  const month = document.getElementById('p-month').value;
 
   box.style.display = 'none';
   box.innerHTML = '';
   document.getElementById('p-amount').value = '';
 
-  const custId = custSel.value;
-  const month = monthEl.value;
-  if(!custId || !month) return;
-
-  const c = customers.find(x => String(x.id).trim() === String(custId).trim());
+  if(!custId||!month) return;
+  const c = customers.find(x=>x.id===custId);
   if(!c) return;
 
-  // Build month list from Jan 2026 to selected month
-  const allMonths = [];
-  let d = new Date('2026-01-01');
-  const endD = new Date(month + '-01');
-  while(d <= endD) {
-    allMonths.push(d.toISOString().slice(0,7));
-    d.setMonth(d.getMonth() + 1);
-  }
+  // Build months from Jan 2026
+  const allMonths=[];
+  let d=new Date('2026-01-01');
+  const end=new Date(month+'-01');
+  while(d<=end){ allMonths.push(d.toISOString().slice(0,7)); d.setMonth(d.getMonth()+1); }
 
-  const unpaidMonths = allMonths.filter(m => !paidRec(custId, m));
-  const paidMonths = allMonths.filter(m => paidRec(custId, m));
+  const unpaidMonths = allMonths.filter(m=>!paidRec(custId,m));
+  const paidMonths = allMonths.filter(m=>paidRec(custId,m));
   const thisMonthPaid = paidRec(custId, month);
-  const arrears = unpaidMonths.filter(m => m !== month);
-  const totalArrear = arrears.length * +c.rent;
+  const arrears = unpaidMonths.filter(m=>m!==month);
   const totalDue = unpaidMonths.length * +c.rent;
 
-  // Auto fill amount
   document.getElementById('p-amount').value = totalDue > 0 ? totalDue : c.rent;
 
-  let html = '';
   if(thisMonthPaid) {
-    html = `<div style="background:var(--green-light);border:1.5px solid #6ee7b7;border-radius:10px;padding:16px">
+    box.innerHTML = `<div style="background:var(--green-light);border:1.5px solid #6ee7b7;border-radius:10px;padding:16px">
       <div style="font-weight:700;color:var(--green);font-size:14px;margin-bottom:8px">✅ Already Paid for ${monthLabel(month)}</div>
-      <div style="font-size:13px;color:var(--muted)">Amount paid: <strong style="color:var(--green)">${fmt(thisMonthPaid.amount)}</strong> via ${thisMonthPaid.mode}</div>
+      <div style="font-size:13px;color:var(--muted)">Amount: <strong style="color:var(--green)">${fmt(thisMonthPaid.amount)}</strong> via ${thisMonthPaid.mode}</div>
     </div>`;
   } else {
-    html = `<div style="background:#fff8f0;border:1.5px solid #fcd34d;border-radius:10px;padding:16px">
+    box.innerHTML = `<div style="background:#fff8f0;border:1.5px solid #fcd34d;border-radius:10px;padding:16px">
       <div style="font-weight:700;font-size:14px;margin-bottom:12px;color:#92400e">💰 Payment Summary for ${c.name}</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:12px">
         <div style="background:#fff;border-radius:8px;padding:12px;border:1px solid var(--border)">
-          <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:4px">Monthly Rent</div>
+          <div style="font-size:10px;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Monthly Rent</div>
           <div style="font-size:18px;font-weight:800;font-family:var(--mono);color:var(--accent)">${fmt(c.rent)}</div>
         </div>
         <div style="background:#fff;border-radius:8px;padding:12px;border:1px solid var(--border)">
-          <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:4px">Arrears (${arrears.length} months)</div>
-          <div style="font-size:18px;font-weight:800;font-family:var(--mono);color:${arrears.length>0?'var(--red)':'var(--green)'}">${fmt(totalArrear)}</div>
+          <div style="font-size:10px;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Arrears (${arrears.length} months)</div>
+          <div style="font-size:18px;font-weight:800;font-family:var(--mono);color:${arrears.length>0?'var(--red)':'var(--green)'}">${fmt(arrears.length*+c.rent)}</div>
         </div>
         <div style="background:#fff;border-radius:8px;padding:12px;border:1px solid var(--border)">
-          <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:4px">Total Due Now</div>
+          <div style="font-size:10px;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Total Due</div>
           <div style="font-size:18px;font-weight:800;font-family:var(--mono);color:var(--red)">${fmt(totalDue)}</div>
         </div>
       </div>
-      ${arrears.length > 0 ? `<div style="font-size:12px;color:var(--red);margin-bottom:8px">⚠️ Unpaid months: <strong>${arrears.map(m=>monthLabel(m)).join(', ')}</strong></div>` : ''}
-      <div style="font-size:12px;color:var(--muted)">✅ Paid months: ${paidMonths.length > 0 ? paidMonths.map(m=>monthLabel(m)).join(', ') : 'None yet'}</div>
+      ${arrears.length>0?`<div style="font-size:12px;color:var(--red);margin-bottom:8px">⚠️ Unpaid: <strong>${arrears.map(m=>monthLabel(m)).join(', ')}</strong></div>`:''}
+      <div style="font-size:12px;color:var(--muted)">✅ Paid: ${paidMonths.length>0?paidMonths.map(m=>monthLabel(m)).join(', '):'None yet'}</div>
     </div>`;
   }
-
   box.style.display = 'block';
-  box.innerHTML = html;
 }
 
-async function recordPayment(sendWa) {
+function recordPayment(sendWa) {
   const sel = document.getElementById('p-cust');
   const custId = sel.value;
-  const c = customers.find(x => String(x.id).trim() === String(custId).trim());
+  const c = customers.find(x=>x.id===custId);
   if(!c) { toast('⚠️ Select a customer', 'error'); return; }
   const month = document.getElementById('p-month').value;
   const amount = document.getElementById('p-amount').value;
   const mode = document.getElementById('p-mode').value;
   const notes = document.getElementById('p-notes').value;
-  if(!month||!amount) { toast('⚠️ Fill all required fields', 'error'); return; }
+  if(!month||!amount) { toast('⚠️ Fill required fields', 'error'); return; }
 
-  try {
-    const existing = payments.find(p=> String(p.cust_id).trim() === String(custId).trim() && String(p.month).trim() === String(month).trim());
-    let rec;
-    if(existing) {
-      // Update local state immediately
-      existing.amount = String(amount);
-      existing.mode = mode;
-      existing.notes = notes;
-      existing.date = new Date().toISOString();
-      rec = existing;
-      // Save to Google Sheets in background
-      apiPatch('payments', existing.id, {amount:+amount,mode,notes,date:existing.date});
-    } else {
-      // Create new record with predictable ID
-      const id = 'p_' + Date.now();
-      rec = {id, cust_id:String(custId), month:String(month), amount:String(amount), mode, notes, date:new Date().toISOString()};
-      // Update local state immediately
-      payments.unshift(rec);
-      // Save to Google Sheets in background
-      apiPost('payments', {id, cust_id:custId, month, amount:+amount, mode, notes, date:rec.date});
-    }
+  const existing = paidRec(custId, month);
+  if(existing) {
+    existing.amount = amount;
+    existing.mode = mode;
+    existing.notes = notes;
+    existing.date = new Date().toISOString();
+    gsPatch('payments', existing.id, {amount, mode, notes, date:existing.date});
+  } else {
+    const id = uid();
+    const rec = {id, cust_id:custId, month, amount, mode, notes, date:new Date().toISOString()};
+    payments.unshift(rec);
+    gsPost('payments', rec);
+  }
 
-    toast('✅ Payment recorded!', 'success');
-    document.getElementById('p-amount').value = '';
-    document.getElementById('p-notes').value = '';
+  saveLocal();
+  document.getElementById('p-notes').value = '';
+  toast('✅ Payment recorded!', 'success');
 
-    // Update views - do NOT call populatePaymentSelect or renderCustomers as it resets dropdown
-    updateHeader();
-    renderPayments();
-    renderDashboard();
-    showPaymentStatus();
+  // Update UI immediately
+  updateHeader();
+  renderDashboard();
+  renderCustomers();
+  renderPayments();
+  showPaymentStatus();
 
-    if(sendWa) {
-      const c = customers.find(x => String(x.id).trim() === String(custId).trim());
-      if(c) {
-        const tpl = document.getElementById('tpl-ack').value;
-        const msg = fillTpl(tpl, {name:c.name, slot:c.slot, month:monthLabel(month), amount, mode});
-        document.getElementById('modal-msg').textContent = msg;
-        document.getElementById('modal-wa-btn').onclick = () => { window.open(waLink(c.phone,msg)); closeModal(); };
-        document.getElementById('ack-modal').classList.add('open');
-      }
-    }
-  } catch(e) { toast('❌ Error: ' + e.message, 'error'); }
+  if(sendWa) {
+    const tpl = document.getElementById('tpl-ack').value;
+    const msg = fillTpl(tpl, {name:c.name, slot:c.slot, month:monthLabel(month), amount, mode});
+    document.getElementById('modal-msg').textContent = msg;
+    document.getElementById('modal-wa-btn').onclick = () => { window.open(waLink(c.phone,msg)); closeModal(); };
+    document.getElementById('ack-modal').classList.add('open');
+  }
 }
 
 function renderPayments() {
-  const fm = document.getElementById('filter-month')?.value || '';
-  let list = fm ? payments.filter(p=>String(p.month)===String(fm)) : [...payments];
-  list = list.sort((a,b) => new Date(b.date||0) - new Date(a.date||0));
+  const fm = document.getElementById('filter-month')?.value||'';
+  let list = fm ? payments.filter(p=>p.month===fm) : [...payments];
+  list.sort((a,b)=>new Date(b.date||0)-new Date(a.date||0));
   const tplAck = document.getElementById('tpl-ack').value;
   const tb = document.getElementById('pay-tbody');
   if(!tb) return;
   if(!list.length) { tb.innerHTML=`<tr><td colspan="7"><div class="empty"><div class="empty-icon">💳</div><div class="empty-text">No payments found</div></div></td></tr>`; return; }
   tb.innerHTML = list.map(p => {
-    const c = customers.find(x => String(x.id) === String(p.cust_id)) || {name:'Unknown',slot:'-',phone:''};
+    const c = customers.find(x=>x.id===p.cust_id)||{name:'Unknown',slot:'-',phone:''};
     const msg = fillTpl(tplAck, {name:c.name, slot:c.slot, month:monthLabel(p.month), amount:p.amount, mode:p.mode});
     return `<tr>
       <td><strong>${c.name}</strong></td>
@@ -886,109 +841,62 @@ function renderPayments() {
 
 // ===== WHATSAPP =====
 function renderWhatsapp() {
-  const month = document.getElementById('wa-month')?.value || curMonth();
+  const month = document.getElementById('wa-month')?.value||curMonth();
   const tpl = document.getElementById('tpl-reminder').value;
   const tplAck = document.getElementById('tpl-ack').value;
   const container = document.getElementById('wa-list');
-  const monthly = customers.filter(c => c.type !== 'daily');
-  const unpaid = monthly.filter(c => !paidRec(c.id, month));
-  const paid = monthly.filter(c => paidRec(c.id, month));
-
+  const monthly = customers.filter(c=>c.type!=='daily');
   if(!customers.length) { container.innerHTML=`<div class="empty"><div class="empty-icon">👤</div><div class="empty-text">Add customers first</div></div>`; return; }
-
-  let html = '<div class="pay-grid">';
-  unpaid.forEach(c => {
-    const msg = fillTpl(tpl, {name:c.name, slot:c.slot, month:monthLabel(month), amount:c.rent, vehicle:c.vehicle_no||''});
-    html += `<div class="pay-card unpaid">
-      <div class="pc-top">
-        <div><div class="pc-name">${c.name}</div><div class="pc-meta">${c.slot}${c.vehicle_no?' · '+c.vehicle_no:''} · ${c.phone}</div></div>
-        <div><div class="pc-amount red">${fmt(c.rent)}</div><span class="badge badge-unpaid">Due</span></div>
-      </div>
-      <div class="pc-actions">
-        <button class="btn btn-wa btn-sm" onclick="window.open('${waLink(c.phone,msg)}')">📲 Send Reminder</button>
-      </div>
-    </div>`;
+  const unpaid = monthly.filter(c=>!paidRec(c.id,month));
+  const paid = monthly.filter(c=>paidRec(c.id,month));
+  let html='<div class="pay-grid">';
+  unpaid.forEach(c=>{
+    const msg=fillTpl(tpl,{name:c.name,slot:c.slot,month:monthLabel(month),amount:c.rent,vehicle:c.vehicle_no||''});
+    html+=`<div class="pay-card unpaid"><div class="pc-top"><div><div class="pc-name">${c.name}</div><div class="pc-meta">${c.slot} · ${c.phone}</div></div><div><div class="pc-amount red">${fmt(c.rent)}</div><span class="badge badge-unpaid">Due</span></div></div><div class="pc-actions"><button class="btn btn-wa btn-sm" onclick="window.open('${waLink(c.phone,msg)}')">📲 Send Reminder</button></div></div>`;
   });
-  paid.forEach(c => {
-    const pr = paidRec(c.id, month);
-    const msg = fillTpl(tplAck, {name:c.name, slot:c.slot, month:monthLabel(month), amount:pr?.amount||c.rent, mode:pr?.mode||'UPI'});
-    html += `<div class="pay-card paid">
-      <div class="pc-top">
-        <div><div class="pc-name">${c.name}</div><div class="pc-meta">${c.slot}</div></div>
-        <div><div class="pc-amount green">${fmt(pr?.amount||c.rent)}</div><span class="badge badge-paid">✓ Paid</span></div>
-      </div>
-      <div class="pc-actions">
-        <button class="btn btn-outline btn-sm" onclick="window.open('${waLink(c.phone,msg)}')">📲 Re-send Ack</button>
-      </div>
-    </div>`;
+  paid.forEach(c=>{
+    const pr=paidRec(c.id,month);
+    const msg=fillTpl(tplAck,{name:c.name,slot:c.slot,month:monthLabel(month),amount:pr?.amount||c.rent,mode:pr?.mode||'UPI'});
+    html+=`<div class="pay-card paid"><div class="pc-top"><div><div class="pc-name">${c.name}</div><div class="pc-meta">${c.slot}</div></div><div><div class="pc-amount green">${fmt(pr?.amount||c.rent)}</div><span class="badge badge-paid">✓ Paid</span></div></div><div class="pc-actions"><button class="btn btn-outline btn-sm" onclick="window.open('${waLink(c.phone,msg)}')">📲 Re-send Ack</button></div></div>`;
   });
-  html += '</div>';
-  if(!monthly.length) html = `<div class="empty"><div class="empty-icon">📲</div><div class="empty-text">No monthly customers yet</div></div>`;
-  container.innerHTML = html;
+  html+='</div>';
+  container.innerHTML=html;
 }
 
 function bulkRemind() {
-  const month = document.getElementById('wa-month')?.value || curMonth();
+  const month = document.getElementById('wa-month')?.value||curMonth();
   const tpl = document.getElementById('tpl-reminder').value;
-  const unpaid = customers.filter(c => c.type!=='daily' && !paidRec(c.id, month));
-  if(!unpaid.length) { toast('🎉 All paid for this month!', 'success'); return; }
-  if(!confirm(`Send reminders to ${unpaid.length} unpaid customers?`)) return;
-  unpaid.forEach((c,i) => {
-    setTimeout(() => {
-      const msg = fillTpl(tpl, {name:c.name, slot:c.slot, month:monthLabel(month), amount:c.rent});
-      window.open(waLink(c.phone, msg));
-    }, i * 600);
+  const unpaid = customers.filter(c=>c.type!=='daily'&&!paidRec(c.id,month));
+  if(!unpaid.length) { toast('🎉 All paid!'); return; }
+  unpaid.forEach((c,i)=>{
+    const msg=fillTpl(tpl,{name:c.name,slot:c.slot,month:monthLabel(month),amount:c.rent,vehicle:c.vehicle_no||''});
+    setTimeout(()=>window.open(waLink(c.phone,msg)), i*600);
   });
 }
 
 function closeModal() { document.getElementById('ack-modal').classList.remove('open'); }
 
-function save() { updateHeader(); }
-
-// ===== SAVE & LOAD TEMPLATES (Google Sheets) =====
-async function saveTemplates() {
-  const reminder = document.getElementById('tpl-reminder').value;
-  const ack = document.getElementById('tpl-ack').value;
-  try {
-    // Check if settings row exists
-    const existing = await apiGet('settings');
-    if(existing.length > 0) {
-      await apiPatch('settings', existing[0].id, {tpl_reminder: reminder, tpl_ack: ack});
-    } else {
-      await apiPost('settings', {tpl_reminder: reminder, tpl_ack: ack});
-    }
-    // Also save locally as backup
-    localStorage.setItem('tpl_reminder', reminder);
-    localStorage.setItem('tpl_ack', ack);
-    toast('✅ Templates saved permanently!', 'success');
-  } catch(e) {
-    // Fallback to localStorage if error
-    localStorage.setItem('tpl_reminder', reminder);
-    localStorage.setItem('tpl_ack', ack);
-    toast('✅ Templates saved!', 'success');
-  }
+// ===== TEMPLATES =====
+function saveTemplates() {
+  localStorage.setItem('tpl_reminder', document.getElementById('tpl-reminder').value);
+  localStorage.setItem('tpl_ack', document.getElementById('tpl-ack').value);
+  toast('✅ Templates saved!', 'success');
+  gsPost('settings', {id:'tpl', tpl_reminder:document.getElementById('tpl-reminder').value, tpl_ack:document.getElementById('tpl-ack').value});
 }
 
-async function loadTemplates() {
-  try {
-    const settings = await apiGet('settings');
-    if(settings.length > 0) {
-      const s = settings[0];
-      if(s.tpl_reminder) document.getElementById('tpl-reminder').value = s.tpl_reminder;
-      if(s.tpl_ack) document.getElementById('tpl-ack').value = s.tpl_ack;
-      return;
-    }
-  } catch(e) {}
-  // Fallback to localStorage
-  const reminder = localStorage.getItem('tpl_reminder');
-  const ack = localStorage.getItem('tpl_ack');
-  if(reminder) document.getElementById('tpl-reminder').value = reminder;
-  if(ack) document.getElementById('tpl-ack').value = ack;
+function loadTemplates() {
+  const r = localStorage.getItem('tpl_reminder');
+  const a = localStorage.getItem('tpl_ack');
+  if(r) document.getElementById('tpl-reminder').value = r;
+  if(a) document.getElementById('tpl-ack').value = a;
 }
 
 // ===== INIT =====
 document.getElementById('c-start').value = new Date().toISOString().slice(0,10);
 document.getElementById('filter-month') && (document.getElementById('filter-month').value = curMonth());
+document.getElementById('p-cust').addEventListener('change', showPaymentStatus);
+document.getElementById('p-month').addEventListener('change', showPaymentStatus);
+loadTemplates();
 loadAll();
 </script>
 </body>
