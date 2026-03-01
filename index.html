@@ -287,8 +287,8 @@
   <div class="card">
     <div class="card-header"><span class="card-title">💳 Record Payment</span></div>
     <div class="form-grid">
-      <div class="form-group"><label>Customer *</label><select id="p-cust" onchange="showPaymentStatus()"></select></div>
-      <div class="form-group"><label>Month *</label><input id="p-month" type="month" onchange="showPaymentStatus()" /></div>
+      <div class="form-group"><label>Customer *</label><select id="p-cust"></select></div>
+      <div class="form-group"><label>Month *</label><input id="p-month" type="month" /></div>
       <div class="form-group"><label>Amount Paid (₹) *</label><input id="p-amount" type="number" placeholder="500" /></div>
       <div class="form-group"><label>Payment Mode</label>
         <select id="p-mode"><option>UPI</option><option>Cash</option><option>Bank Transfer</option><option>Other</option></select>
@@ -523,7 +523,10 @@ function renderAll() {
   updateHeader();
   renderDashboard();
   renderCustomers();
-  populatePaymentSelect();
+  // Only populate select if payments tab is not active
+  const paymentsActive = document.getElementById('page-payments')?.classList.contains('active');
+  if(!paymentsActive) populatePaymentSelect();
+  else renderPayments();
 }
 
 // ===== HEADER =====
@@ -740,7 +743,7 @@ function showPaymentStatus() {
   const arrears = unpaidMonths.filter(m=>m!==month);
   const totalDue = unpaidMonths.length * +c.rent;
 
-  document.getElementById('p-amount').value = totalDue > 0 ? totalDue : c.rent;
+  document.getElementById('p-amount').value = thisMonthPaid ? thisMonthPaid.amount : (totalDue > 0 ? totalDue : c.rent);
 
   if(thisMonthPaid) {
     box.innerHTML = `<div style="background:var(--green-light);border:1.5px solid #6ee7b7;border-radius:10px;padding:16px">
