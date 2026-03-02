@@ -206,7 +206,7 @@
     <div style="font-size:48px;margin-bottom:8px;">🅿️</div>
     <div style="font-size:22px;font-weight:800;color:#1a56db;margin-bottom:4px;">AHS Parking</div>
     <div style="font-size:13px;color:#64748b;margin-bottom:28px;">Manager Login</div>
-    <input id="login-user" type="text" placeholder="Email" style="width:100%;padding:12px 16px;border:2px solid #e2e8f0;border-radius:10px;font-size:15px;margin-bottom:12px;outline:none;font-family:inherit;" />
+    <input id="login-user" type="text" placeholder="Username" style="width:100%;padding:12px 16px;border:2px solid #e2e8f0;border-radius:10px;font-size:15px;margin-bottom:12px;outline:none;font-family:inherit;" />
     <input id="login-pass" type="password" placeholder="Password" style="width:100%;padding:12px 16px;border:2px solid #e2e8f0;border-radius:10px;font-size:15px;margin-bottom:20px;outline:none;font-family:inherit;" onkeydown="if(event.key==='Enter')doLogin()" />
     <button onclick="doLogin()" style="width:100%;padding:14px;background:linear-gradient(135deg,#1a56db,#1e40af);color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;">🔐 Login</button>
     <div id="login-error" style="color:#e02424;font-size:13px;margin-top:12px;display:none;">❌ Wrong username or password!</div>
@@ -225,7 +225,7 @@
     <div class="hdr-stat"><div class="hdr-val" id="h-customers">-</div><div class="hdr-lbl">Customers</div></div>
     <div class="hdr-stat"><div class="hdr-val" id="h-collected">-</div><div class="hdr-lbl">Collected</div></div>
     <div class="hdr-stat"><div class="hdr-val" id="h-pending" style="color:#fca5a5">-</div><div class="hdr-lbl">Pending</div></div>
-    <button onclick="window.doLogout()" style="background:rgba(255,255,255,0.15);border:none;color:#fff;padding:6px 12px;border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit;">🚪</button>
+    <button onclick="sessionStorage.clear();location.reload();" style="background:rgba(255,255,255,0.15);border:none;color:#fff;padding:6px 12px;border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit;">🚪</button>
   </div>
 </header>
 
@@ -446,61 +446,16 @@ Your slot is confirmed. 🙏
   </div>
 </div>
 
-</div><!-- end main-app -->
 
 <div class="toast" id="toast"></div>
 
-<!-- LOGIN SCRIPT -->
+<!-- SINGLE FIREBASE SCRIPT - handles both auth and database -->
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+import { getFirestore, collection, getDocs, deleteDoc, doc, setDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
 
-const _app = initializeApp({
-  apiKey: "AIzaSyAmDaOtXAxzPSHjYS2TNuZa5rB8WNdedJg",
-  authDomain: "ahsparking-7bd3e.firebaseapp.com",
-  projectId: "ahsparking-7bd3e",
-  storageBucket: "ahsparking-7bd3e.firebasestorage.app",
-  messagingSenderId: "773104039836",
-  appId: "1:773104039836:web:67a81e6c8d1a021233ba59"
-});
-const _auth = getAuth(_app);
-
-onAuthStateChanged(_auth, user => {
-  if(user) {
-    document.getElementById('login-screen').style.display = 'none';
-    document.getElementById('main-app').style.display = 'block';
-  } else {
-    document.getElementById('login-screen').style.display = 'flex';
-    document.getElementById('main-app').style.display = 'none';
-  }
-});
-
-window.doLogin = async function() {
-  const email = document.getElementById('login-user').value.trim();
-  const pass = document.getElementById('login-pass').value;
-  const errEl = document.getElementById('login-error');
-  errEl.style.display = 'none';
-  try {
-    await signInWithEmailAndPassword(_auth, email, pass);
-  } catch(e) {
-    errEl.style.display = 'block';
-    errEl.textContent = '❌ Wrong email or password!';
-  }
-}
-
-window.doLogout = async function() {
-  await signOut(_auth);
-  location.reload();
-}
-</script>
-
-
-<!-- Firebase SDK -->
-<script type="module">
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-import { getFirestore, collection, getDocs, addDoc, updateDoc, deleteDoc, doc, setDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
-
-// ===== FIREBASE CONFIG =====
+// ===== FIREBASE INIT (single instance) =====
 const firebaseConfig = {
   apiKey: "AIzaSyAmDaOtXAxzPSHjYS2TNuZa5rB8WNdedJg",
   authDomain: "ahsparking-7bd3e.firebaseapp.com",
@@ -512,8 +467,41 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+const auth = getAuth(app);
 
-// ===== LOCAL STATE (instant UI updates) =====
+// ===== AUTH =====
+onAuthStateChanged(auth, user => {
+  if(user) {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('main-app').style.display = 'block';
+    loadAll();
+  } else {
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('main-app').style.display = 'none';
+  }
+});
+
+window.doLogin = async function() {
+  const email = document.getElementById('login-user').value.trim();
+  const pass = document.getElementById('login-pass').value;
+  const errEl = document.getElementById('login-error');
+  errEl.style.display = 'none';
+  if(!email || !pass) { errEl.style.display='block'; errEl.textContent='❌ Enter email and password!'; return; }
+  try {
+    await signInWithEmailAndPassword(auth, email, pass);
+  } catch(e) {
+    errEl.style.display = 'block';
+    errEl.textContent = '❌ Wrong email or password!';
+    console.error(e.code, e.message);
+  }
+}
+
+window.doLogout = async function() {
+  await signOut(auth);
+  location.reload();
+}
+
+// ===== LOCAL STATE =====
 let customers = JSON.parse(localStorage.getItem('ahs_customers') || '[]');
 let payments = JSON.parse(localStorage.getItem('ahs_payments') || '[]');
 
@@ -533,7 +521,7 @@ async function fbGetAll(col) {
   try {
     const snap = await getDocs(collection(db, col));
     return snap.docs.map(d => ({id: d.id, ...d.data()}));
-  } catch(e) { return []; }
+  } catch(e) { console.error(e); return []; }
 }
 
 // ===== HELPERS =====
@@ -566,10 +554,7 @@ function fmtDate(iso) { try { return new Date(iso).toLocaleDateString('en-IN'); 
 
 // ===== LOAD DATA =====
 async function loadAll() {
-  document.getElementById('dash-unpaid').innerHTML = '<div class="loading"><div class="spinner"></div> Loading...</div>';
-  // Show local data immediately
   if(customers.length > 0) renderAll();
-  // Sync from Firebase
   try {
     const [fbC, fbP] = await Promise.all([fbGetAll('customers'), fbGetAll('payments')]);
     if(fbC.length > 0 || fbP.length > 0) {
@@ -577,7 +562,7 @@ async function loadAll() {
       payments = fbP;
       saveLocal();
     }
-  } catch(e) { console.error('Firebase sync error:', e); }
+  } catch(e) { console.error('Load error:', e); }
   renderAll();
 }
 
@@ -610,7 +595,7 @@ window.switchTab = function(name, el) {
   document.getElementById('page-'+name).classList.add('active');
   el.classList.add('active');
   if(name==='customers') renderCustomers();
-  if(name==='payments') { populatePaymentSelect(); document.getElementById('filter-month').value=''; renderPayments(); }
+  if(name==='payments') { populatePaymentSelect(); document.getElementById('filter-month').value=curMonth(); renderPayments(); }
   if(name==='whatsapp') { document.getElementById('wa-month').value=curMonth(); renderWhatsapp(); }
   if(name==='dashboard') renderDashboard();
 }
@@ -637,13 +622,7 @@ function renderDashboard() {
   if(!unpaid.length) { container.innerHTML=`<div class="empty"><div class="empty-icon">🎉</div><div class="empty-text">All customers paid for ${monthLabel(cm)}!</div></div>`; return; }
   container.innerHTML = `<div class="pay-grid">${unpaid.map(c => {
     const msg = fillTpl(tpl, {name:c.name, slot:c.slot, month:monthLabel(cm), amount:c.rent, vehicle:c.vehicle_no||''});
-    return `<div class="pay-card unpaid">
-      <div class="pc-top">
-        <div><div class="pc-name">${c.name}</div><div class="pc-meta">${c.slot} · ${c.phone}</div></div>
-        <div><div class="pc-amount red">${fmt(c.rent)}</div><span class="badge badge-unpaid">Due</span></div>
-      </div>
-      <div class="pc-actions"><button class="btn btn-wa btn-sm" onclick="window.open('${waLink(c.phone,msg)}')">📲 Remind</button></div>
-    </div>`;
+    return `<div class="pay-card unpaid"><div class="pc-top"><div><div class="pc-name">${c.name}</div><div class="pc-meta">${c.slot} · ${c.phone}</div></div><div><div class="pc-amount red">${fmt(c.rent)}</div><span class="badge badge-unpaid">Due</span></div></div><div class="pc-actions"><button class="btn btn-wa btn-sm" onclick="window.open('${waLink(c.phone,msg)}')">📲 Remind</button></div></div>`;
   }).join('')}</div>`;
 }
 
@@ -712,7 +691,6 @@ window.deleteCustomer = async function(id) {
   fbDelete('customers', id);
 }
 
-// ===== EDIT CUSTOMER =====
 window.openEditModal = function(id) {
   const c = customers.find(x=>x.id===id);
   if(!c) return;
@@ -747,7 +725,7 @@ window.saveEdit = async function() {
   const idx = customers.findIndex(c=>c.id===id);
   if(idx>=0) customers[idx] = {...customers[idx], name, phone, type, vehicle_no, slot, rent, advance_paid, customer_since, start_date, address};
   saveLocal();
-  closeEditModal();
+  window.closeEditModal();
   renderAll();
   toast('✅ Customer updated!', 'success');
   fbSave('customers', id, customers[customers.findIndex(c=>c.id===id)]);
@@ -777,7 +755,6 @@ function showPaymentStatus() {
   const c = customers.find(x=>x.id===custId);
   if(!c) return;
 
-  // Build months from Jan 2026
   const allMonths=[];
   let d=new Date('2026-01-01');
   const end=new Date(month+'-01');
@@ -805,7 +782,7 @@ function showPaymentStatus() {
           <div style="font-size:18px;font-weight:800;font-family:var(--mono);color:var(--accent)">${fmt(c.rent)}</div>
         </div>
         <div style="background:#fff;border-radius:8px;padding:12px;border:1px solid var(--border)">
-          <div style="font-size:10px;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Arrears (${arrears.length} months)</div>
+          <div style="font-size:10px;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Arrears (${arrears.length} mo)</div>
           <div style="font-size:18px;font-weight:800;font-family:var(--mono);color:${arrears.length>0?'var(--red)':'var(--green)'}">${fmt(arrears.length*+c.rent)}</div>
         </div>
         <div style="background:#fff;border-radius:8px;padding:12px;border:1px solid var(--border)">
@@ -843,7 +820,6 @@ window.recordPayment = function(sendWa) {
     payments.unshift(rec);
     fbSave('payments', recId, rec);
   }
-
   saveLocal();
   document.getElementById('p-notes').value = '';
   toast('✅ Payment recorded!', 'success');
@@ -922,29 +898,6 @@ window.bulkRemind = function() {
 
 window.closeModal = function() { document.getElementById('ack-modal').classList.remove('open'); }
 
-window.downloadExcel = function() {
-  const fm = document.getElementById('filter-month')?.value || '';
-  let list = fm ? payments.filter(p=>p.month===fm) : [...payments];
-  list.sort((a,b)=>new Date(b.date||0)-new Date(a.date||0));
-  
-  // Build CSV
-  const rows = [['Customer', 'Phone', 'Slot', 'Month', 'Amount', 'Mode', 'Notes', 'Date']];
-  list.forEach(p => {
-    const c = customers.find(x=>x.id===p.cust_id)||{name:'Unknown',phone:'-',slot:'-'};
-    rows.push([c.name, c.phone, c.slot, monthLabel(p.month), p.amount, p.mode, p.notes||'', fmtDate(p.date)]);
-  });
-  
-  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
-  const blob = new Blob([csv], {type:'text/csv'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `AHS_Payments_${fm || 'All'}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-  toast('✅ Downloaded!', 'success');
-}
-
 window.saveTemplates = function() {
   localStorage.setItem('tpl_reminder', document.getElementById('tpl-reminder').value);
   localStorage.setItem('tpl_ack', document.getElementById('tpl-ack').value);
@@ -960,10 +913,10 @@ function loadTemplates() {
 
 // ===== INIT =====
 document.getElementById('c-start').value = new Date().toISOString().slice(0,10);
+document.getElementById('filter-month') && (document.getElementById('filter-month').value = curMonth());
 document.getElementById('p-cust').addEventListener('change', showPaymentStatus);
 document.getElementById('p-month').addEventListener('change', showPaymentStatus);
 loadTemplates();
-loadAll();
 </script>
 </body>
 </html>
