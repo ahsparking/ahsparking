@@ -206,7 +206,7 @@
     <div style="font-size:48px;margin-bottom:8px;">🅿️</div>
     <div style="font-size:22px;font-weight:800;color:#1a56db;margin-bottom:4px;">AHS Parking</div>
     <div style="font-size:13px;color:#64748b;margin-bottom:28px;">Manager Login</div>
-    <input id="login-user" type="text" placeholder="Username" style="width:100%;padding:12px 16px;border:2px solid #e2e8f0;border-radius:10px;font-size:15px;margin-bottom:12px;outline:none;font-family:inherit;" />
+    <input id="login-user" type="text" placeholder="Email" style="width:100%;padding:12px 16px;border:2px solid #e2e8f0;border-radius:10px;font-size:15px;margin-bottom:12px;outline:none;font-family:inherit;" />
     <input id="login-pass" type="password" placeholder="Password" style="width:100%;padding:12px 16px;border:2px solid #e2e8f0;border-radius:10px;font-size:15px;margin-bottom:20px;outline:none;font-family:inherit;" onkeydown="if(event.key==='Enter')doLogin()" />
     <button onclick="doLogin()" style="width:100%;padding:14px;background:linear-gradient(135deg,#1a56db,#1e40af);color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;">🔐 Login</button>
     <div id="login-error" style="color:#e02424;font-size:13px;margin-top:12px;display:none;">❌ Wrong username or password!</div>
@@ -225,7 +225,7 @@
     <div class="hdr-stat"><div class="hdr-val" id="h-customers">-</div><div class="hdr-lbl">Customers</div></div>
     <div class="hdr-stat"><div class="hdr-val" id="h-collected">-</div><div class="hdr-lbl">Collected</div></div>
     <div class="hdr-stat"><div class="hdr-val" id="h-pending" style="color:#fca5a5">-</div><div class="hdr-lbl">Pending</div></div>
-    <button onclick="sessionStorage.clear();location.reload();" style="background:rgba(255,255,255,0.15);border:none;color:#fff;padding:6px 12px;border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit;">🚪</button>
+    <button onclick="window.doLogout()" style="background:rgba(255,255,255,0.15);border:none;color:#fff;padding:6px 12px;border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit;">🚪</button>
   </div>
 </header>
 
@@ -451,29 +451,49 @@ Your slot is confirmed. 🙏
 <div class="toast" id="toast"></div>
 
 <!-- LOGIN SCRIPT -->
-<script>
-const USERS = {
-  'ahsparking': 'ahs@2026'  // username: password — change these!
-};
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
 
-function doLogin() {
-  const user = document.getElementById('login-user').value.trim();
-  const pass = document.getElementById('login-pass').value;
-  if(USERS[user] && USERS[user] === pass) {
-    sessionStorage.setItem('ahs_logged_in', '1');
+const _app = initializeApp({
+  apiKey: "AIzaSyAmDaOtXAxzPSHjYS2TNuZa5rB8WNdedJg",
+  authDomain: "ahsparking-7bd3e.firebaseapp.com",
+  projectId: "ahsparking-7bd3e",
+  storageBucket: "ahsparking-7bd3e.firebasestorage.app",
+  messagingSenderId: "773104039836",
+  appId: "1:773104039836:web:67a81e6c8d1a021233ba59"
+});
+const _auth = getAuth(_app);
+
+onAuthStateChanged(_auth, user => {
+  if(user) {
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('main-app').style.display = 'block';
   } else {
-    document.getElementById('login-error').style.display = 'block';
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('main-app').style.display = 'none';
+  }
+});
+
+window.doLogin = async function() {
+  const email = document.getElementById('login-user').value.trim();
+  const pass = document.getElementById('login-pass').value;
+  const errEl = document.getElementById('login-error');
+  errEl.style.display = 'none';
+  try {
+    await signInWithEmailAndPassword(_auth, email, pass);
+  } catch(e) {
+    errEl.style.display = 'block';
+    errEl.textContent = '❌ Wrong email or password!';
   }
 }
 
-// Check if already logged in
-if(sessionStorage.getItem('ahs_logged_in')) {
-  document.getElementById('login-screen').style.display = 'none';
-  document.getElementById('main-app').style.display = 'block';
+window.doLogout = async function() {
+  await signOut(_auth);
+  location.reload();
 }
 </script>
+
 
 <!-- Firebase SDK -->
 <script type="module">
