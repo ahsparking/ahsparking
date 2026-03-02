@@ -310,6 +310,7 @@
       <span class="card-title">Payment History</span>
       <div class="flex">
         <input id="filter-month" type="month" onchange="renderPayments()" style="padding:6px 10px;font-size:12px;" />
+        <button class="btn btn-success btn-sm" onclick="downloadExcel()">📥 Download Excel</button>
       </div>
     </div>
     <div class="table-wrap">
@@ -547,7 +548,7 @@ window.switchTab = function(name, el) {
   document.getElementById('page-'+name).classList.add('active');
   el.classList.add('active');
   if(name==='customers') renderCustomers();
-  if(name==='payments') { populatePaymentSelect(); document.getElementById('filter-month').value=curMonth(); renderPayments(); }
+  if(name==='payments') { populatePaymentSelect(); document.getElementById('filter-month').value=''; renderPayments(); }
   if(name==='whatsapp') { document.getElementById('wa-month').value=curMonth(); renderWhatsapp(); }
   if(name==='dashboard') renderDashboard();
 }
@@ -859,6 +860,29 @@ window.bulkRemind = function() {
 
 window.closeModal = function() { document.getElementById('ack-modal').classList.remove('open'); }
 
+window.downloadExcel = function() {
+  const fm = document.getElementById('filter-month')?.value || '';
+  let list = fm ? payments.filter(p=>p.month===fm) : [...payments];
+  list.sort((a,b)=>new Date(b.date||0)-new Date(a.date||0));
+  
+  // Build CSV
+  const rows = [['Customer', 'Phone', 'Slot', 'Month', 'Amount', 'Mode', 'Notes', 'Date']];
+  list.forEach(p => {
+    const c = customers.find(x=>x.id===p.cust_id)||{name:'Unknown',phone:'-',slot:'-'};
+    rows.push([c.name, c.phone, c.slot, monthLabel(p.month), p.amount, p.mode, p.notes||'', fmtDate(p.date)]);
+  });
+  
+  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `AHS_Payments_${fm || 'All'}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('✅ Downloaded!', 'success');
+}
+
 window.saveTemplates = function() {
   localStorage.setItem('tpl_reminder', document.getElementById('tpl-reminder').value);
   localStorage.setItem('tpl_ack', document.getElementById('tpl-ack').value);
@@ -874,7 +898,6 @@ function loadTemplates() {
 
 // ===== INIT =====
 document.getElementById('c-start').value = new Date().toISOString().slice(0,10);
-document.getElementById('filter-month') && (document.getElementById('filter-month').value = curMonth());
 document.getElementById('p-cust').addEventListener('change', showPaymentStatus);
 document.getElementById('p-month').addEventListener('change', showPaymentStatus);
 loadTemplates();
