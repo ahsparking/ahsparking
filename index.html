@@ -200,6 +200,22 @@
 </head>
 <body>
 
+<!-- LOGIN SCREEN -->
+<div id="login-screen" style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(135deg,#1a56db,#1e40af);">
+  <div style="background:#fff;border-radius:20px;padding:40px 32px;width:90%;max-width:360px;box-shadow:0 20px 60px rgba(0,0,0,0.3);text-align:center;">
+    <div style="font-size:48px;margin-bottom:8px;">🅿️</div>
+    <div style="font-size:22px;font-weight:800;color:#1a56db;margin-bottom:4px;">AHS Parking</div>
+    <div style="font-size:13px;color:#64748b;margin-bottom:28px;">Manager Login</div>
+    <input id="login-user" type="text" placeholder="Username" style="width:100%;padding:12px 16px;border:2px solid #e2e8f0;border-radius:10px;font-size:15px;margin-bottom:12px;outline:none;font-family:inherit;" />
+    <input id="login-pass" type="password" placeholder="Password" style="width:100%;padding:12px 16px;border:2px solid #e2e8f0;border-radius:10px;font-size:15px;margin-bottom:20px;outline:none;font-family:inherit;" onkeydown="if(event.key==='Enter')doLogin()" />
+    <button onclick="doLogin()" style="width:100%;padding:14px;background:linear-gradient(135deg,#1a56db,#1e40af);color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;">🔐 Login</button>
+    <div id="login-error" style="color:#e02424;font-size:13px;margin-top:12px;display:none;">❌ Wrong username or password!</div>
+  </div>
+</div>
+
+<!-- MAIN APP (hidden until login) -->
+<div id="main-app" style="display:none;">
+
 <header>
   <div class="logo">
     <div class="logo-icon">🅿️</div>
@@ -209,6 +225,7 @@
     <div class="hdr-stat"><div class="hdr-val" id="h-customers">-</div><div class="hdr-lbl">Customers</div></div>
     <div class="hdr-stat"><div class="hdr-val" id="h-collected">-</div><div class="hdr-lbl">Collected</div></div>
     <div class="hdr-stat"><div class="hdr-val" id="h-pending" style="color:#fca5a5">-</div><div class="hdr-lbl">Pending</div></div>
+    <button onclick="sessionStorage.clear();location.reload();" style="background:rgba(255,255,255,0.15);border:none;color:#fff;padding:6px 12px;border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit;">🚪</button>
   </div>
 </header>
 
@@ -429,9 +446,34 @@ Your slot is confirmed. 🙏
   </div>
 </div>
 
-<div class="toast" id="toast"></div>
+</div><!-- end main-app -->
 
 <div class="toast" id="toast"></div>
+
+<!-- LOGIN SCRIPT -->
+<script>
+const USERS = {
+  'ahsparking': 'ahs@2026'  // username: password — change these!
+};
+
+function doLogin() {
+  const user = document.getElementById('login-user').value.trim();
+  const pass = document.getElementById('login-pass').value;
+  if(USERS[user] && USERS[user] === pass) {
+    sessionStorage.setItem('ahs_logged_in', '1');
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('main-app').style.display = 'block';
+  } else {
+    document.getElementById('login-error').style.display = 'block';
+  }
+}
+
+// Check if already logged in
+if(sessionStorage.getItem('ahs_logged_in')) {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('main-app').style.display = 'block';
+}
+</script>
 
 <!-- Firebase SDK -->
 <script type="module">
